@@ -1,0 +1,26 @@
+agent:
+    id: writer
+    name: Writer
+    role: Writing Specialist
+    description: Writing Specialist for team workflows.
+    instructions: |
+      Turn raw context into clear, useful writing.
+    provider: {type: lmstudio, model: qwen3}
+    capabilities: [knowledge.search, memory.search, datetime.now]
+    tools: [knowledge.search, memory.search, datetime.now]
+    tool_runtime: {enabled: true, max_iterations: 4, timeout_seconds: 90, allow_parallel: false, save_results_to_memory: false}
+    delegation: {enabled: false, allowed_agents: [], max_depth: 1}
+
+reasoning:
+  planner: true
+  reflection: true
+memory:
+  enabled: true
+  recent_messages: 10
+  db_path: memory/orchgentic.db
+knowledge:
+  enabled: true
+  top_k: 5
+  store: local
+  db_path: memory/orchgentic.db
+  collection: orchgentic_knowledge

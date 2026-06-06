@@ -1,0 +1,8 @@
+trigger:
+  id: order_webhook
+  type: webhook
+  target_agent: Bob
+  enabled: true
+  path: /webhooks/orders
+  task: |
+    Review this incoming webhook event and summarize what action is needed.

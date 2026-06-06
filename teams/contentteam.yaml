@@ -1,0 +1,9 @@
+team:
+  name: ContentTeam
+  description: Research, write, and review content with specialist agents.
+  orchestrator: Manager
+  members: [Researcher, Writer, Reviewer]
+  shared_context: true
+  max_rounds: 3
+  task: |
+    Produce a clear, useful content response using the team's specialists.

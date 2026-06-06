@@ -1,0 +1,28 @@
+agent:
+  id: manager
+  name: Manager
+  role: Team Orchestrator
+  description: Coordinates specialist agents.
+  instructions: |
+    You coordinate specialist agents and synthesize their work into useful final results.
+  provider:
+    type: lmstudio
+    model: qwen3
+  capabilities: [delegate.agent, datetime.now, knowledge.search, memory.search]
+  tools: [delegate.agent, datetime.now, knowledge.search, memory.search]
+  tool_runtime: {enabled: true, max_iterations: 6, timeout_seconds: 120, allow_parallel: false, save_results_to_memory: false}
+  delegation: {enabled: true, allowed_agents: [Researcher, Writer, Reviewer], max_depth: 2}
+
+  reasoning:
+    planner: true
+    reflection: true
+  memory:
+    enabled: true
+    recent_messages: 10
+    db_path: memory/orchgentic.db
+  knowledge:
+    enabled: true
+    top_k: 5
+    store: local
+    db_path: memory/orchgentic.db
+    collection: orchgentic_knowledge

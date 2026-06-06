@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "orchgentic"
+version = "0.7.5a0"
+description = "Open-source orchestration runtime for autonomous and multi-agent AI systems"
+requires-python = ">=3.12"
+dependencies = ["typer>=0.16", "pydantic>=2.11", "pyyaml>=6.0", "openai>=1.100.0", "python-dotenv>=1.0.1", "fastapi>=0.115.0", "uvicorn>=0.30.0", "httpx>=0.28.0",
+  "tzdata>=2025.2"
+]
+
+[project.optional-dependencies]
+zilliz = ["pymilvus>=2.5.0"]
+docs = ["pypdf>=5.0.0", "python-docx>=1.1.2"]
+dev = ["pytest>=8.0.0", "pytest-asyncio>=0.24.0"]
+
+[project.scripts]
+orch = "orchgentic.cli:app"
+[tool.setuptools.packages.find]
+include = ["orchgentic*"]

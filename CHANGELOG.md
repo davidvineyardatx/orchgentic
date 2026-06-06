@@ -1,0 +1,21 @@
+# Changelog
+
+## v0.7.5-alpha Developer Preview
+
+Initial public developer preview release.
+
+Includes:
+
+- Branded Orchgentic package and `orch` CLI
+- Multi-agent orchestration
+- Team execution
+- Delegation
+- Tool runtime
+- Tool parser continuation fixes
+- Capability preflight
+- Memory and semantic knowledge
+- Triggers and webhooks
+- Groq and OpenAI provider support
+- Time context resolver
+- `datetime.local`
+- `tzdata` dependency for Windows timezone support

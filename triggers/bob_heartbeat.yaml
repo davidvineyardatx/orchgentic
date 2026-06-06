@@ -1,0 +1,8 @@
+trigger:
+  id: bob_heartbeat
+  type: heartbeat
+  target_agent: Bob
+  enabled: true
+  interval_seconds: 60
+  task: |
+    Check whether anything needs attention and provide a short status update.

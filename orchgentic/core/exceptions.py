@@ -1,0 +1,10 @@
+class AgentCoreError(Exception): pass
+class ConfigurationError(AgentCoreError): pass
+class ProviderError(AgentCoreError): pass
+class MemoryError(AgentCoreError): pass
+class TriggerError(AgentCoreError): pass
+class KnowledgeError(AgentCoreError): pass
+class ToolError(AgentCoreError): pass
+class PermissionError(AgentCoreError): pass
+class OrchestrationError(AgentCoreError): pass
+class TeamError(AgentCoreError): pass
