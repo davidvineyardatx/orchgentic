@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.7.6-alpha
+
+- Added `orch create agent`
+- Added `orch create team`
+- Added `orch create trigger`
+
+
 ## v0.7.5-alpha Developer Preview
 
 Initial public developer preview release.

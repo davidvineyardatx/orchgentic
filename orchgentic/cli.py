@@ -3,6 +3,7 @@ from pathlib import Path
 import json
 import typer
 import uvicorn
+from orchgentic.scaffold import create_agent_file, create_team_file, create_trigger_file
 from orchgentic.workspace import init_workspace
 from orchgentic.config.loader import load_agent, load_trigger, load_all_triggers
 from orchgentic.providers.factory import create_provider
@@ -21,21 +22,86 @@ from orchgentic.orchestration.team_runner import TeamRunner
 from orchgentic.runtime.preflight import CapabilityPreflight
 
 app = typer.Typer()
+create_app = typer.Typer(help="Create Orchgentic configuration files.")
 memory_app = typer.Typer()
+create_app = typer.Typer(help="Create Orchgentic configuration files.")
 trigger_app = typer.Typer()
+create_app = typer.Typer(help="Create Orchgentic configuration files.")
 knowledge_app = typer.Typer()
+create_app = typer.Typer(help="Create Orchgentic configuration files.")
 tool_app = typer.Typer()
+create_app = typer.Typer(help="Create Orchgentic configuration files.")
 
 app.add_typer(memory_app, name="memory")
 app.add_typer(trigger_app, name="trigger")
 app.add_typer(knowledge_app, name="knowledge")
 app.add_typer(tool_app, name="tool")
+app.add_typer(create_app, name="create")
 
 def _agent_path(name):
     return Path("agents") / (name.lower() if name.lower().endswith(".yaml") else f"{name.lower()}.yaml")
 
 def _trigger_path(name):
     return Path("triggers") / (name.lower() if name.lower().endswith(".yaml") else f"{name.lower()}.yaml")
+
+
+@create_app.command("agent")
+def create_agent(
+    name: str,
+    provider: str = typer.Option("groq", "--provider"),
+    model: str = typer.Option("llama-3.3-70b-versatile", "--model"),
+    role: str = typer.Option("General Assistant", "--role"),
+    timezone: str = typer.Option("America/Chicago", "--timezone"),
+    locale: str = typer.Option("en-US", "--locale"),
+    overwrite: bool = typer.Option(False, "--overwrite"),
+):
+    """Create a starter agent YAML file."""
+    try:
+        path = create_agent_file(name, provider_type=provider, model=model, role=role, timezone=timezone, locale=locale, overwrite=overwrite)
+    except FileExistsError as exc:
+        typer.echo(str(exc))
+        typer.echo("Use --overwrite to replace it.")
+        raise typer.Exit(1)
+    typer.echo("Created agent:")
+    typer.echo(str(path))
+
+
+@create_app.command("team")
+def create_team(
+    name: str,
+    orchestrator: str = typer.Option("Manager", "--orchestrator"),
+    members: str = typer.Option("Researcher,Writer,Reviewer", "--members"),
+    overwrite: bool = typer.Option(False, "--overwrite"),
+):
+    """Create a starter team YAML file."""
+    member_list = [m.strip() for m in members.split(",") if m.strip()]
+    try:
+        path = create_team_file(name, orchestrator=orchestrator, members=member_list, overwrite=overwrite)
+    except FileExistsError as exc:
+        typer.echo(str(exc))
+        typer.echo("Use --overwrite to replace it.")
+        raise typer.Exit(1)
+    typer.echo("Created team:")
+    typer.echo(str(path))
+
+
+@create_app.command("trigger")
+def create_trigger(
+    name: str,
+    target_agent: str = typer.Option("Bob", "--target-agent"),
+    interval_seconds: int = typer.Option(3600, "--interval-seconds"),
+    overwrite: bool = typer.Option(False, "--overwrite"),
+):
+    """Create a starter heartbeat trigger YAML file."""
+    try:
+        path = create_trigger_file(name, target_agent=target_agent, interval_seconds=interval_seconds, overwrite=overwrite)
+    except FileExistsError as exc:
+        typer.echo(str(exc))
+        typer.echo("Use --overwrite to replace it.")
+        raise typer.Exit(1)
+    typer.echo("Created trigger:")
+    typer.echo(str(path))
+
 
 @app.command()
 def init(path: str = "."):
