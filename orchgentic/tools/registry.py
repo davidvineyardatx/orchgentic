@@ -1,3 +1,6 @@
+from orchgentic.tools.core.gmail_search import GmailSearchTool
+from orchgentic.tools.core.gmail_read import GmailReadTool
+from orchgentic.tools.core.gmail_draft import GmailDraftTool
 from orchgentic.registry import Registry
 from orchgentic.tools.core.datetime_now import DateTimeNowTool
 from orchgentic.tools.core.datetime_local import DateTimeLocalTool
@@ -28,6 +31,9 @@ def default_tool_registry(memory=None, knowledge=None, source_agent_config=None)
         MemorySearchTool(memory),
         KnowledgeSearchTool(knowledge),
         DelegateAgentTool(source_agent_config=source_agent_config),
+        GmailSearchTool(agent_config=source_agent_config),
+        GmailReadTool(agent_config=source_agent_config),
+        GmailDraftTool(agent_config=source_agent_config),
     ]:
         registry.register(tool.name, tool)
 

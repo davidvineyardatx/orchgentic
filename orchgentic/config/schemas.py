@@ -41,6 +41,8 @@ class AgentConfig(BaseModel):
     reasoning: ReasoningConfig = Field(default_factory=ReasoningConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     knowledge: KnowledgeConfig = Field(default_factory=KnowledgeConfig)
+    gmail: dict = Field(default_factory=dict)
+    tool_policies: dict = Field(default_factory=dict)
 class TriggerConfig(BaseModel):
     id: str
     type: str

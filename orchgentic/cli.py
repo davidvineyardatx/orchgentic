@@ -3,6 +3,8 @@ from pathlib import Path
 import json
 import typer
 import uvicorn
+from orchgentic.connectors.gmail.oauth import connect_gmail
+from orchgentic.connectors.gmail.storage import list_connections, read_account, delete_connection
 from orchgentic.scaffold import create_agent_file, create_team_file, create_trigger_file
 from orchgentic.workspace import init_workspace
 from orchgentic.config.loader import load_agent, load_trigger, load_all_triggers
@@ -22,6 +24,8 @@ from orchgentic.orchestration.team_runner import TeamRunner
 from orchgentic.runtime.preflight import CapabilityPreflight
 
 app = typer.Typer()
+connect_app = typer.Typer(help="Connect external accounts.")
+gmail_app = typer.Typer(help="Manage Gmail connections.")
 create_app = typer.Typer(help="Create Orchgentic configuration files.")
 memory_app = typer.Typer()
 create_app = typer.Typer(help="Create Orchgentic configuration files.")
@@ -37,12 +41,44 @@ app.add_typer(trigger_app, name="trigger")
 app.add_typer(knowledge_app, name="knowledge")
 app.add_typer(tool_app, name="tool")
 app.add_typer(create_app, name="create")
+app.add_typer(connect_app, name="connect")
+app.add_typer(gmail_app, name="gmail")
 
 def _agent_path(name):
     return Path("agents") / (name.lower() if name.lower().endswith(".yaml") else f"{name.lower()}.yaml")
 
 def _trigger_path(name):
     return Path("triggers") / (name.lower() if name.lower().endswith(".yaml") else f"{name.lower()}.yaml")
+
+
+
+def _parse_tool_args(arg_items):
+    parsed = {}
+    for item in arg_items or []:
+        if "=" not in item:
+            raise typer.BadParameter(f"Invalid --arg value '{item}'. Expected key=value.")
+        key, value = item.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            raise typer.BadParameter("Invalid --arg value. Key cannot be empty.")
+
+        lowered = value.lower()
+        if lowered == "true":
+            parsed[key] = True
+        elif lowered == "false":
+            parsed[key] = False
+        elif lowered in {"none", "null"}:
+            parsed[key] = None
+        else:
+            try:
+                parsed[key] = int(value)
+            except ValueError:
+                try:
+                    parsed[key] = float(value)
+                except ValueError:
+                    parsed[key] = value
+    return parsed
 
 
 @create_app.command("agent")
@@ -101,6 +137,59 @@ def create_trigger(
         raise typer.Exit(1)
     typer.echo("Created trigger:")
     typer.echo(str(path))
+
+
+
+
+@connect_app.command("gmail")
+def connect_gmail_command(
+    name: str = typer.Option("default", "--name", help="Named Gmail connection, such as support, sales, or founder."),
+    credentials: str = typer.Option(None, "--credentials", help="Path to Google OAuth credentials JSON."),
+):
+    """Connect a named Gmail account using browser OAuth."""
+    try:
+        info = connect_gmail(name=name, credentials_file=credentials)
+    except Exception as exc:
+        typer.echo(f"Gmail connection failed: {exc}")
+        raise typer.Exit(1)
+    typer.echo("Gmail connected:")
+    typer.echo(f"name: {info.get('name')}")
+    typer.echo(f"email: {info.get('email') or 'unknown'}")
+
+@gmail_app.command("list")
+def gmail_list():
+    """List named Gmail connections."""
+    connections = list_connections()
+    if not connections:
+        typer.echo("No Gmail connections found.")
+        return
+    for name in connections:
+        account = read_account(name)
+        typer.echo(f"{name}: {account.get('email', 'unknown')}")
+
+@gmail_app.command("status")
+def gmail_status(name: str = typer.Option(None, "--name", help="Optional named Gmail connection.")):
+    """Show Gmail connection status."""
+    if name:
+        account = read_account(name)
+        if not account:
+            typer.echo(f"Gmail connection not found: {name}")
+            raise typer.Exit(1)
+        typer.echo(f"{name}: {account.get('email', 'unknown')}")
+        return
+    connections = list_connections()
+    if not connections:
+        typer.echo("No Gmail connections found.")
+        return
+    for item in connections:
+        account = read_account(item)
+        typer.echo(f"{item}: {account.get('email', 'unknown')}")
+
+@gmail_app.command("disconnect")
+def gmail_disconnect(name: str = typer.Option("default", "--name", help="Named Gmail connection to remove.")):
+    """Disconnect and remove a named Gmail connection token."""
+    if delete_connection(name): typer.echo(f"Removed Gmail connection: {name}")
+    else: typer.echo(f"Gmail connection not found: {name}")
 
 
 @app.command()
@@ -292,10 +381,40 @@ def run(
 
     asyncio.run(_run())
 
+def _parse_key_value_args(arg_items):
+    parsed = {}
+    for item in arg_items or []:
+        if "=" not in item:
+            raise typer.BadParameter(f"Invalid --arg value '{item}'. Expected key=value.")
+        key, value = item.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            raise typer.BadParameter("Invalid --arg value. Key cannot be empty.")
+
+        lowered = value.lower()
+        if lowered == "true":
+            parsed[key] = True
+        elif lowered == "false":
+            parsed[key] = False
+        elif lowered in {"none", "null"}:
+            parsed[key] = None
+        else:
+            try:
+                parsed[key] = int(value)
+            except ValueError:
+                try:
+                    parsed[key] = float(value)
+                except ValueError:
+                    parsed[key] = value
+    return parsed
+
+
 @tool_app.command("run")
 def tool_run(
     tool_name: str,
-    args: str = typer.Option("{}", "--args"),
+    args: str = typer.Option("{}", "--args", help="JSON object of tool arguments."),
+    arg: list[str] = typer.Option([], "--arg", help="Tool argument in key=value format. Repeat for multiple arguments."),
     agent_name: str = typer.Option("Bob", "--agent")
 ):
     async def _run():
@@ -312,8 +431,16 @@ def tool_run(
 
         try:
             parsed_args = json.loads(args)
+            if not isinstance(parsed_args, dict):
+                raise ValueError("--args must be a JSON object")
         except Exception as exc:
             typer.echo(f"Invalid JSON for --args: {exc}")
+            raise typer.Exit(1)
+
+        try:
+            parsed_args.update(_parse_key_value_args(arg))
+        except typer.BadParameter as exc:
+            typer.echo(str(exc))
             raise typer.Exit(1)
 
         result = await tool.execute(**parsed_args)

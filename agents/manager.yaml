@@ -6,8 +6,8 @@ agent:
   instructions: |
     You coordinate specialist agents and synthesize their work into useful final results.
   provider:
-    type: groq
-    model: llama-3.3-70b-versatile
+    type: lmstudio
+    model: qwen3
   capabilities: [delegate.agent, datetime.now, knowledge.search, memory.search]
   tools: [delegate.agent, datetime.now, knowledge.search, memory.search]
   tool_runtime: {enabled: true, max_iterations: 6, timeout_seconds: 120, allow_parallel: false, save_results_to_memory: false}

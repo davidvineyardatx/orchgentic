@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.7.7-alpha
+
+- Added named Gmail connections
+- Added Gmail connector CLI commands
+- Added gmail.search, gmail.read, gmail.draft
+- Added tool policy governance foundation
+
+
 ## v0.7.6-alpha
 
 - Added `orch create agent`
