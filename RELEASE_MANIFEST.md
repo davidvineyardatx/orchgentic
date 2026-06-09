@@ -1,10 +1,8 @@
 # Orchgentic v0.7.0 Full Cumulative Release Manifest
 
-Source Package: `orchgentic-v0.6.0-full-cumulative.zip`
+Source Package: `orchgentic-v0.7.8`
 
-Sprint 6 source files: 59
-Missing Sprint 6 files before reports: 0
-Added Sprint 7 files before reports: 12
+Sprint 7
 
 ## Missing Sprint 6 Files
 None
@@ -22,3 +20,21 @@ None
 - orchgentic/tools/core/delegate_agent.py
 - tests/test_agent_registry.py
 - tests/test_team_registry.py
+
+## Added
+
+- `gmail.send`
+- `gmail.reply`
+- `gmail.delete`
+- runtime confirmation enforcement
+- Gmail recipient allowlist/domain policy enforcement
+- Gmail send/modify OAuth scopes
+- delete behavior moves messages to Trash only
+
+## Governance
+
+Gmail actions require runtime policy approval and can require explicit `confirm=true`.
+
+## Reconnect Required
+
+Existing Gmail tokens should be reconnected to include send/modify scopes.

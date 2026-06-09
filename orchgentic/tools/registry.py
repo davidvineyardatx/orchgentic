@@ -1,3 +1,6 @@
+from orchgentic.tools.core.gmail_delete import GmailDeleteTool
+from orchgentic.tools.core.gmail_reply import GmailReplyTool
+from orchgentic.tools.core.gmail_send import GmailSendTool
 from orchgentic.tools.core.gmail_search import GmailSearchTool
 from orchgentic.tools.core.gmail_read import GmailReadTool
 from orchgentic.tools.core.gmail_draft import GmailDraftTool
@@ -34,6 +37,9 @@ def default_tool_registry(memory=None, knowledge=None, source_agent_config=None)
         GmailSearchTool(agent_config=source_agent_config),
         GmailReadTool(agent_config=source_agent_config),
         GmailDraftTool(agent_config=source_agent_config),
+        GmailSendTool(agent_config=source_agent_config),
+        GmailReplyTool(agent_config=source_agent_config),
+        GmailDeleteTool(agent_config=source_agent_config),
     ]:
         registry.register(tool.name, tool)
 

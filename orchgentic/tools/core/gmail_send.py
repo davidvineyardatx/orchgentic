@@ -1,0 +1,40 @@
+from orchgentic.tools.base import BaseTool
+from orchgentic.tools.schemas import ToolResult
+from orchgentic.connectors.gmail.client import send_message
+from orchgentic.connectors.gmail.oauth import GmailConnectionError
+from orchgentic.runtime.tool_policy import ToolPolicyRuntime, ToolPolicyError
+
+class GmailSendTool(BaseTool):
+    name = "gmail.send"
+    description = "Send a Gmail message through a named Gmail connection with policy enforcement."
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "to": {"type": "string"},
+            "subject": {"type": "string"},
+            "body": {"type": "string"},
+            "confirm": {"type": "boolean"},
+            "connection": {"type": "string"}
+        },
+        "required": ["to", "subject", "body"]
+    }
+
+    def __init__(self, agent_config=None):
+        self.agent_config = agent_config
+        self.policy = ToolPolicyRuntime(agent_config)
+
+    def _connection(self, explicit=None):
+        if explicit:
+            return explicit
+        gmail = getattr(self.agent_config, "gmail", None)
+        if isinstance(gmail, dict):
+            return gmail.get("connection", "default")
+        return "default"
+
+    async def execute(self, to: str, subject: str, body: str, confirm: bool = False, connection: str | None = None, **kwargs):
+        try:
+            self.policy.enforce_gmail_send(to, confirm=confirm)
+            sent = send_message(self._connection(connection), to, subject, body)
+            return ToolResult(True, self.name, data={"message_id": sent.get("id"), "thread_id": sent.get("threadId"), "status": "sent"})
+        except (GmailConnectionError, ToolPolicyError, Exception) as exc:
+            return ToolResult(False, self.name, error=str(exc))

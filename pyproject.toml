@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "orchgentic"
-version = "0.7.7a0"
+version = "0.7.8a0"
 description = "Open-source orchestration runtime for autonomous and multi-agent AI systems"
 requires-python = ">=3.12"
 dependencies = ["typer>=0.16", "pydantic>=2.11", "pyyaml>=6.0", "openai>=1.100.0", "python-dotenv>=1.0.1", "fastapi>=0.115.0", "uvicorn>=0.30.0", "httpx>=0.28.0",

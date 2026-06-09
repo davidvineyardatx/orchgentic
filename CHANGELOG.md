@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.7.8-alpha
+
+- Added `gmail.send`
+- Added `gmail.reply`
+- Added `gmail.delete`
+- Added runtime confirmation enforcement
+- Added Gmail recipient policy enforcement
+- Added Gmail send/modify OAuth scopes
+- Gmail delete moves messages to Trash only
+
+
 ## v0.7.7-alpha
 
 - Added named Gmail connections
