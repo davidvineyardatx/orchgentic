@@ -2,7 +2,7 @@
 
 **Orchgentic is an open-source orchestration runtime for autonomous and multi-agent AI systems.**
 
-Developer Preview: `v0.7.8-alpha`
+Developer Preview: `v0.7.5-alpha`
 
 Orchgentic helps developers configure and run AI agents with:
 

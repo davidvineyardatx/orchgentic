@@ -23,12 +23,28 @@ class GmailReplyTool(BaseTool):
         self.policy = ToolPolicyRuntime(agent_config)
 
     def _connection(self, explicit=None):
+        gmail_cfg = getattr(self.agent_config, "gmail", None)
+
+        # Agent configuration ALWAYS wins over model-provided arguments.
+        # This prevents an LLM from inventing credential names such as
+        # "primary", "default", or "user" and overriding the agent YAML.
+        if isinstance(gmail_cfg, dict):
+            configured = gmail_cfg.get("connection")
+            if configured:
+                return configured
+
+        if gmail_cfg is not None:
+            configured = getattr(gmail_cfg, "connection", None)
+            if configured:
+                return configured
+
+        # Explicit runtime argument is only honored when the agent has no
+        # configured Gmail connection.
         if explicit:
             return explicit
-        gmail = getattr(self.agent_config, "gmail", None)
-        if isinstance(gmail, dict):
-            return gmail.get("connection", "default")
+
         return "default"
+
 
     async def execute(self, message_id: str, body: str, confirm: bool = False, connection: str | None = None, **kwargs):
         try:

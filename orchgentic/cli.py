@@ -1,3 +1,6 @@
+from orchgentic.runtime.deterministic_formatter import DeterministicFormatter
+from orchgentic.runtime.deterministic_router import DeterministicRouter
+from orchgentic.runtime.cost_tracker import build_route_telemetry, append_route_log
 import asyncio
 from pathlib import Path
 import json
@@ -81,70 +84,134 @@ def _parse_tool_args(arg_items):
     return parsed
 
 
-@create_app.command("agent")
-def create_agent(
-    name: str,
-    provider: str = typer.Option("groq", "--provider"),
-    model: str = typer.Option("llama-3.3-70b-versatile", "--model"),
-    role: str = typer.Option("General Assistant", "--role"),
-    timezone: str = typer.Option("America/Chicago", "--timezone"),
-    locale: str = typer.Option("en-US", "--locale"),
-    overwrite: bool = typer.Option(False, "--overwrite"),
-):
-    """Create a starter agent YAML file."""
+
+
+async def _try_deterministic_route(task, cfg, registry, debug=False):
+    router = DeterministicRouter()
+    decision = router.route(task, agent_config=cfg)
+
+    if not decision.matched or decision.requires_llm:
+        return None
+
+    formatter = DeterministicFormatter()
+    selected_tool = decision.tool or (decision.steps[0].tool if decision.steps else None)
+
+    telemetry = build_route_telemetry(
+        route_type=getattr(decision, "route_type", "single_tool"),
+        external_llm_used=False,
+        selected_tool=selected_tool,
+        confidence=decision.confidence,
+        reason=decision.reason,
+        estimated_external_tokens_saved=1500,
+    )
+
     try:
-        path = create_agent_file(name, provider_type=provider, model=model, role=role, timezone=timezone, locale=locale, overwrite=overwrite)
-    except FileExistsError as exc:
-        typer.echo(str(exc))
-        typer.echo("Use --overwrite to replace it.")
-        raise typer.Exit(1)
-    typer.echo("Created agent:")
-    typer.echo(str(path))
+        append_route_log("logs/routes.jsonl", telemetry)
+    except Exception:
+        pass
 
+    tool_events = []
 
-@create_app.command("team")
-def create_team(
-    name: str,
-    orchestrator: str = typer.Option("Manager", "--orchestrator"),
-    members: str = typer.Option("Researcher,Writer,Reviewer", "--members"),
-    overwrite: bool = typer.Option(False, "--overwrite"),
-):
-    """Create a starter team YAML file."""
-    member_list = [m.strip() for m in members.split(",") if m.strip()]
-    try:
-        path = create_team_file(name, orchestrator=orchestrator, members=member_list, overwrite=overwrite)
-    except FileExistsError as exc:
-        typer.echo(str(exc))
-        typer.echo("Use --overwrite to replace it.")
-        raise typer.Exit(1)
-    typer.echo("Created team:")
-    typer.echo(str(path))
+    if getattr(decision, "route_type", "single_tool") == "multi_tool":
+        context = {}
+        final_data = {}
 
+        for step in decision.steps:
+            tool = registry.get(step.tool)
+            if not tool:
+                return None
 
-@create_app.command("trigger")
-def create_trigger(
-    name: str,
-    target_agent: str = typer.Option("Bob", "--target-agent"),
-    interval_seconds: int = typer.Option(3600, "--interval-seconds"),
-    overwrite: bool = typer.Option(False, "--overwrite"),
-):
-    """Create a starter heartbeat trigger YAML file."""
-    try:
-        path = create_trigger_file(name, target_agent=target_agent, interval_seconds=interval_seconds, overwrite=overwrite)
-    except FileExistsError as exc:
-        typer.echo(str(exc))
-        typer.echo("Use --overwrite to replace it.")
-        raise typer.Exit(1)
-    typer.echo("Created trigger:")
-    typer.echo(str(path))
+            # Resolve simple reference pattern: $search.messages[].id
+            if step.arguments.get("message_id") == "$search.messages[].id":
+                messages = ((context.get("search") or {}).get("messages") or [])
+                read_messages = []
+                for item in messages:
+                    message_id = item.get("id")
+                    if not message_id:
+                        continue
+                    result = await tool.execute(message_id=message_id)
+                    tool_events.append({
+                        "tool": step.tool,
+                        "arguments": {"message_id": message_id},
+                        "success": getattr(result, "success", None),
+                        "error": getattr(result, "error", None),
+                    })
+                    if getattr(result, "success", False):
+                        read_messages.append(getattr(result, "data", {}))
+                context[step.result_key or step.tool] = read_messages
+                final_data["messages"] = read_messages
+                continue
 
+            result = await tool.execute(**step.arguments)
+            tool_events.append({
+                "tool": step.tool,
+                "arguments": step.arguments,
+                "success": getattr(result, "success", None),
+                "error": getattr(result, "error", None),
+            })
 
+            if not getattr(result, "success", False):
+                if debug:
+                    typer.echo("ROUTING")
+                    typer.echo(telemetry)
+                    typer.echo("")
+                    typer.echo("TOOLS")
+                    typer.echo(tool_events)
+                    typer.echo("")
+                return result
+
+            context[step.result_key or step.tool] = getattr(result, "data", {})
+            final_data[step.result_key or step.tool] = getattr(result, "data", {})
+
+        if debug:
+            typer.echo("ROUTING")
+            typer.echo(telemetry)
+            typer.echo("")
+            typer.echo("TOOLS")
+            typer.echo(tool_events)
+            typer.echo("")
+
+        class FormattedResult:
+            success = True
+            error = None
+            data = formatter.format(decision.formatter, final_data)
+
+        return FormattedResult()
+
+    tool = registry.get(decision.tool)
+    if not tool:
+        return None
+
+    result = await tool.execute(**decision.arguments)
+    tool_events.append({
+        "tool": decision.tool,
+        "arguments": decision.arguments,
+        "success": getattr(result, "success", None),
+        "error": getattr(result, "error", None),
+    })
+
+    if debug:
+        typer.echo("ROUTING")
+        typer.echo(telemetry)
+        typer.echo("")
+        typer.echo("TOOLS")
+        typer.echo(tool_events)
+        typer.echo("")
+
+    if getattr(result, "success", False):
+        class FormattedResult:
+            success = True
+            error = None
+            data = formatter.format(decision.formatter, result)
+        return FormattedResult()
+
+    return result
 
 
 @connect_app.command("gmail")
 def connect_gmail_command(
-    name: str = typer.Option("default", "--name", help="Named Gmail connection, such as support, sales, or founder."),
-    credentials: str = typer.Option(None, "--credentials", help="Path to Google OAuth credentials JSON."),
+    name: str = typer.Option("default", "--name", help="Named Gmail connection, such as assistant, bob, support, sales, or founder."),
+    credentials: str = typer.Option(None, "--credentials", help="Optional path to Google OAuth credentials JSON."),
 ):
     """Connect a named Gmail account using browser OAuth."""
     try:
@@ -152,9 +219,11 @@ def connect_gmail_command(
     except Exception as exc:
         typer.echo(f"Gmail connection failed: {exc}")
         raise typer.Exit(1)
+
     typer.echo("Gmail connected:")
     typer.echo(f"name: {info.get('name')}")
     typer.echo(f"email: {info.get('email') or 'unknown'}")
+
 
 @gmail_app.command("list")
 def gmail_list():
@@ -163,12 +232,16 @@ def gmail_list():
     if not connections:
         typer.echo("No Gmail connections found.")
         return
-    for name in connections:
-        account = read_account(name)
-        typer.echo(f"{name}: {account.get('email', 'unknown')}")
+
+    for item in connections:
+        account = read_account(item) or {}
+        typer.echo(f"{item}: {account.get('email', 'unknown')}")
+
 
 @gmail_app.command("status")
-def gmail_status(name: str = typer.Option(None, "--name", help="Optional named Gmail connection.")):
+def gmail_status(
+    name: str = typer.Option(None, "--name", help="Optional named Gmail connection."),
+):
     """Show Gmail connection status."""
     if name:
         account = read_account(name)
@@ -177,19 +250,26 @@ def gmail_status(name: str = typer.Option(None, "--name", help="Optional named G
             raise typer.Exit(1)
         typer.echo(f"{name}: {account.get('email', 'unknown')}")
         return
+
     connections = list_connections()
     if not connections:
         typer.echo("No Gmail connections found.")
         return
+
     for item in connections:
-        account = read_account(item)
+        account = read_account(item) or {}
         typer.echo(f"{item}: {account.get('email', 'unknown')}")
 
+
 @gmail_app.command("disconnect")
-def gmail_disconnect(name: str = typer.Option("default", "--name", help="Named Gmail connection to remove.")):
+def gmail_disconnect(
+    name: str = typer.Option("default", "--name", help="Named Gmail connection to remove."),
+):
     """Disconnect and remove a named Gmail connection token."""
-    if delete_connection(name): typer.echo(f"Removed Gmail connection: {name}")
-    else: typer.echo(f"Gmail connection not found: {name}")
+    if delete_connection(name):
+        typer.echo(f"Removed Gmail connection: {name}")
+    else:
+        typer.echo(f"Gmail connection not found: {name}")
 
 
 @app.command()
@@ -371,7 +451,23 @@ def run(
         else:
             task = typer.prompt("Task")
 
-        agent = AssistantAgent(cfg, create_provider(cfg.provider))
+        provider = create_provider(cfg.provider)
+        memory = MemoryManager(cfg.memory.db_path)
+        knowledge = KnowledgeManager(provider, cfg.knowledge.store, cfg.knowledge.db_path, cfg.knowledge.collection)
+        registry = default_tool_registry(memory, knowledge, source_agent_config=cfg)
+
+        deterministic_result = await _try_deterministic_route(task, cfg, registry, debug=debug)
+        if deterministic_result is not None:
+            typer.echo("ANSWER")
+            if getattr(deterministic_result, "data", None) is not None:
+                typer.echo(deterministic_result.data)
+            elif getattr(deterministic_result, "error", None):
+                typer.echo(deterministic_result.error)
+            else:
+                typer.echo(deterministic_result)
+            return
+
+        agent = AssistantAgent(cfg, provider)
         typer.echo(await agent.run(
             task,
             debug=debug,

@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.7.10-alpha
+
+- Added editable router policy config and fallback terms for LLM-required requests.
+
+
+- Added deterministic argument extraction
+- Added deterministic multi-tool chaining for Gmail subject-line retrieval
+- Added deterministic formatting layer
+- Added route telemetry logging
+- Added estimated token savings metadata
+
+
+## v0.7.9-alpha
+
+- Added deterministic router
+- Added no-LLM routing for date/time
+- Added no-LLM routing for Gmail search/read
+- Added exact-field no-LLM routing for Gmail draft/send
+- Added route telemetry helper
+
+
 ## v0.7.8-alpha
 
 - Added `gmail.send`

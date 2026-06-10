@@ -1,0 +1,40 @@
+deterministic_router:
+  enabled: true
+
+  fallback_to_llm_terms:
+    - summarize
+    - summary
+    - analyse
+    - analyze
+    - explain
+    - rewrite
+    - classify
+    - recommend
+    - compare
+    - interpret
+    - generate
+    - write a response
+    - draft a response
+    - draft content creatively
+    - summarize body
+    - summarize body content
+    - summarize email
+    - summarize message
+
+  deterministic_safe_terms:
+    - what time
+    - current time
+    - what day
+    - current date
+    - search gmail
+    - read gmail message
+    - count gmail
+    - show subject lines
+
+  thresholds:
+    deterministic_min_confidence: 0.90
+    local_reasoner_min_confidence: 0.70
+
+  behavior:
+    allow_tool_prefetch_before_llm: false
+    log_routes: true
