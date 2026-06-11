@@ -38,3 +38,11 @@ deterministic_router:
   behavior:
     allow_tool_prefetch_before_llm: false
     log_routes: true
+
+
+token_estimation:
+  enabled: true
+  chars_per_token: 4
+  default_completion_tokens: 300
+  include_memory_context: true
+  include_tool_schema_context: true

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.7.10.1-alpha
+
+- Added dynamic token-savings estimation
+- Added execution timing for route telemetry
+- Added route metrics aggregation
+- Added `orch route-metrics`
+
+
 ## v0.7.10-alpha
 
 - Added editable router policy config and fallback terms for LLM-required requests.

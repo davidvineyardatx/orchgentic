@@ -1,3 +1,6 @@
+from orchgentic.runtime.metrics import record_route_metric
+from orchgentic.runtime.token_estimator import estimate_route_savings
+import time
 from orchgentic.runtime.deterministic_formatter import DeterministicFormatter
 from orchgentic.runtime.deterministic_router import DeterministicRouter
 from orchgentic.runtime.cost_tracker import build_route_telemetry, append_route_log
@@ -87,11 +90,22 @@ def _parse_tool_args(arg_items):
 
 
 async def _try_deterministic_route(task, cfg, registry, debug=False):
+    route_start = time.perf_counter()
     router = DeterministicRouter()
     decision = router.route(task, agent_config=cfg)
 
     if not decision.matched or decision.requires_llm:
         return None
+
+    provider_cfg = getattr(cfg, "provider", None)
+    provider_type = getattr(provider_cfg, "type", None) if provider_cfg is not None else None
+    provider_model = getattr(provider_cfg, "model", None) if provider_cfg is not None else None
+    token_estimate = estimate_route_savings(
+        system_prompt=getattr(cfg, "instructions", ""),
+        tool_context={"selected_tool": getattr(decision, "tool", None), "arguments": getattr(decision, "arguments", {})},
+        task=task,
+        expected_completion_tokens=300,
+    )
 
     formatter = DeterministicFormatter()
     selected_tool = decision.tool or (decision.steps[0].tool if decision.steps else None)
@@ -102,11 +116,17 @@ async def _try_deterministic_route(task, cfg, registry, debug=False):
         selected_tool=selected_tool,
         confidence=decision.confidence,
         reason=decision.reason,
-        estimated_external_tokens_saved=1500,
+        estimated_external_tokens_saved=token_estimate.total,
+        execution_time_ms=round((time.perf_counter() - route_start) * 1000, 2),
+        agent=getattr(cfg, "name", None),
+        provider=provider_type,
+        model=provider_model,
+        token_estimate=token_estimate.to_dict(),
     )
 
     try:
         append_route_log("logs/routes.jsonl", telemetry)
+        record_route_metric(telemetry)
     except Exception:
         pass
 
@@ -276,6 +296,15 @@ def gmail_disconnect(
 def init(path: str = "."):
     init_workspace(path)
     typer.echo(f"Workspace initialized at {Path(path).resolve()}")
+
+
+@app.command("route-metrics")
+def route_metrics():
+    """Show aggregated route metrics."""
+    from orchgentic.runtime.metrics import load_metrics
+    metrics = load_metrics()
+    typer.echo(metrics.summary())
+
 
 @app.command("list-agents")
 def list_agents():
