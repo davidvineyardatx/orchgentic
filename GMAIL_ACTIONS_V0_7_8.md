@@ -56,7 +56,7 @@ tool_policies:
 ## Test Commands
 
 ```bash
-orch tool run gmail.send --agent Bob --arg to=studio@davidvineyard.com --arg subject="Governed Send Test" --arg body="This is a governed send test from Orchgentic." --arg confirm=true
+orch tool run gmail.send --agent Bob --arg to=you@email.com --arg subject="Governed Send Test" --arg body="This is a governed send test from Orchgentic." --arg confirm=true
 orch tool run gmail.reply --agent Bob --arg message_id=MESSAGE_ID --arg body="Thanks, I received this." --arg confirm=true
 orch tool run gmail.delete --agent Bob --arg message_id=MESSAGE_ID --arg confirm=true
 ```
