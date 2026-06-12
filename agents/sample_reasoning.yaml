@@ -1,0 +1,30 @@
+# Reasoning-only example. Keep provider/model in the normal agent-level provider block.
+agent:
+  id: sample-reasoning
+  name: Sample Reasoning Agent
+  role: Assistant
+  provider:
+    type: groq
+    model: llama-3.3-70b-versatile
+  routing:
+    workflow:
+      enabled: true
+      multi_step_threshold: 0.80
+    event:
+      enabled: true
+      autonomous_events_require_policy_checks: true
+    policy:
+      enabled: true
+      block_disabled_tools_before_llm: true
+      hold_confirmation_tools_before_llm: true
+
+  reasoning:
+    planner: true
+    reflection: true
+    local_reasoner: true
+    confidence_scoring: true
+    confidence_high_threshold: 0.78
+    confidence_low_threshold: 0.52
+    escalation:
+      enabled: true
+      min_confidence: 0.52

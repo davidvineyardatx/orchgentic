@@ -38,13 +38,28 @@ class DeterministicFormatter:
     def _datetime(self, data: dict) -> str:
         if not isinstance(data, dict):
             return str(data)
-        time_value = data.get("time", "")
+        time_value = data.get("time_12h") or self._to_12_hour_time(data.get("time", ""))
         date = data.get("date", "")
         weekday = data.get("weekday", "")
         timezone = data.get("timezone", "")
         if time_value:
-            return f"The current time is {time_value} ({timezone}). Today is {weekday}, {date}."
+            return f"The current local time is {time_value} ({timezone}). Today is {weekday}, {date}."
         return str(data)
+
+
+    def _to_12_hour_time(self, time_value: str) -> str:
+        if not time_value or not isinstance(time_value, str):
+            return ""
+
+        try:
+            hour_text, minute, second = time_value.split(":", 2)
+            hour = int(hour_text)
+        except (TypeError, ValueError):
+            return time_value
+
+        suffix = "AM" if hour < 12 else "PM"
+        hour_12 = hour % 12 or 12
+        return f"{hour_12}:{minute}:{second} {suffix}"
 
     def _gmail_search(self, data: dict) -> str:
         messages = (data or {}).get("messages", []) if isinstance(data, dict) else []

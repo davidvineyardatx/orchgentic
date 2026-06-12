@@ -1,3 +1,4 @@
+from orchgentic.runtime.router_judgment import evaluate_orchestration_judgment
 from orchgentic.runtime.metrics import record_route_metric
 from orchgentic.runtime.token_estimator import estimate_route_savings
 import time
@@ -122,6 +123,9 @@ async def _try_deterministic_route(task, cfg, registry, debug=False):
         provider=provider_type,
         model=provider_model,
         token_estimate=token_estimate.to_dict(),
+        local_reasoner_confidence=decision.confidence,
+        escalation_reason="not_required",
+        reasoning_level="local_tool",
     )
 
     try:
@@ -296,6 +300,22 @@ def gmail_disconnect(
 def init(path: str = "."):
     init_workspace(path)
     typer.echo(f"Workspace initialized at {Path(path).resolve()}")
+
+
+
+@app.command("judge-route")
+def judge_route(
+    task: str = typer.Argument(...),
+    agent_name: str = typer.Option("Bob", "--agent"),
+    event_type: str = typer.Option("manual", "--event-type", help="manual, heartbeat, webhook, scheduled, or unknown."),
+):
+    """Evaluate local reasoner, workflow, event, policy, and escalation judgment for a task."""
+    cfg = load_agent(_agent_path(agent_name))
+    provider = create_provider(cfg.provider)
+    memory = MemoryManager(cfg.memory.db_path)
+    knowledge = KnowledgeManager(provider, cfg.knowledge.store, cfg.knowledge.db_path, cfg.knowledge.collection)
+    registry = default_tool_registry(memory, knowledge, source_agent_config=cfg)
+    typer.echo(evaluate_orchestration_judgment(task, cfg=cfg, registry=registry, event_context={"event_type": event_type, "source": "cli"}))
 
 
 @app.command("route-metrics")
@@ -494,6 +514,24 @@ def run(
                 typer.echo(deterministic_result.error)
             else:
                 typer.echo(deterministic_result)
+            return
+
+        judgment = evaluate_orchestration_judgment(
+            task,
+            cfg=cfg,
+            registry=registry,
+            event_context={"event_type": "manual", "source": "cli"},
+        )
+
+        if debug:
+            typer.echo("ORCHESTRATION_JUDGMENT")
+            typer.echo(judgment)
+            typer.echo("")
+
+        final_decision = judgment.get("final_decision", {}) or {}
+        if final_decision.get("action") in {"block", "hold_for_confirmation"}:
+            typer.echo("ANSWER")
+            typer.echo(final_decision.get("reason") or "Routing stopped by policy.")
             return
 
         agent = AssistantAgent(cfg, provider)

@@ -68,6 +68,7 @@ class TimeContextResolver:
             "weekday": now.strftime("%A"),
             "date": now.strftime("%Y-%m-%d"),
             "time": now.strftime("%H:%M:%S"),
+            "time_12h": now.strftime("%I:%M:%S %p").lstrip("0"),
             "utc_offset": now.strftime("%z"),
         }
 
@@ -80,5 +81,6 @@ class TimeContextResolver:
             "weekday": now.strftime("%A"),
             "date": now.strftime("%Y-%m-%d"),
             "time": now.strftime("%H:%M:%S"),
+            "time_12h": now.strftime("%I:%M:%S %p").lstrip("0"),
             "utc_offset": "+0000",
         }

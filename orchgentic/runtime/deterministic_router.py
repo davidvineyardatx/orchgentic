@@ -66,16 +66,17 @@ class DeterministicRouter:
 
     def _time(self, text: str):
         patterns = [
-            r"what time is it",
-            r"what is the time",
-            r"what's the time",
-            r"current time",
-            r"tell me the time",
-            r"what day is it",
-            r"what is today",
-            r"what date is it",
-            r"current day",
-            r"current date",
+            r"\bwhat\s+time\s+is\s+it\b",
+            r"\bwhat\s+is\s+(?:the\s+)?(?:local\s+)?time\b",
+            r"\bwhat(?:'s|\s+is)\s+(?:the\s+)?(?:local\s+)?time\b",
+            r"\blocal\s+time\b",
+            r"\bcurrent\s+(?:local\s+)?time\b",
+            r"\btell\s+me\s+(?:the\s+)?(?:local\s+)?time\b",
+            r"\bwhat\s+day\s+is\s+it\b",
+            r"\bwhat\s+is\s+today\b",
+            r"\bwhat\s+date\s+is\s+it\b",
+            r"\bcurrent\s+day\b",
+            r"\bcurrent\s+date\b",
         ]
         if any(re.search(p, text) for p in patterns):
             return RouteDecision(

@@ -1,0 +1,15 @@
+# Add this under an agent config such as agents/Bob.yaml
+reasoning:
+  planner: true
+  reflection: true
+  local_reasoner: true
+  confidence_scoring: true
+  confidence_high_threshold: 0.78
+  confidence_low_threshold: 0.52
+  escalation:
+    enabled: true
+    min_confidence: 0.52
+    # Optional. If omitted, low-confidence tasks use the primary provider.
+    fallback_provider:
+      type: groq
+      model: llama-3.3-70b-versatile

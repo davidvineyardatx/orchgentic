@@ -3,6 +3,12 @@ from orchgentic.agents.registry import AgentRegistry
 from orchgentic.orchestration.context import SharedContext
 from orchgentic.core.exceptions import TeamError
 from orchgentic.runtime.preflight import CapabilityPreflight
+from orchgentic.orchestration.synthesis_guardrails import (
+    build_member_task,
+    build_synthesis_task,
+    sanitize_final_answer,
+    extract_answer_for_handoff,
+)
 
 class TeamRunner:
     def __init__(self, agent_manager: AgentManager | None = None):
@@ -59,22 +65,19 @@ class TeamRunner:
             metadata={"team": team_config.name, "role": "orchestrator"},
             preflight=False,
         )
-        shared.add_message(team_config.orchestrator, "team", orchestrator_output)
+        orchestrator_answer = extract_answer_for_handoff(orchestrator_output)
+        shared.add_message(team_config.orchestrator, "team", orchestrator_answer)
         outputs.append({
             "agent": team_config.orchestrator,
             "role": "orchestrator",
-            "output": orchestrator_output,
+            "output": orchestrator_answer,
         })
 
         for member in team_config.members:
             if member == team_config.orchestrator:
                 continue
 
-            member_task = (
-                f"Team task: {team_task}\n\n"
-                f"Shared context so far:\n{shared.to_text()}\n\n"
-                f"Provide your specialist contribution as {member}."
-            )
+            member_task = build_member_task(team_task, shared.to_text(), member)
 
             result = await self.agent_manager.run_agent(
                 member,
@@ -83,28 +86,31 @@ class TeamRunner:
                 metadata={"team": team_config.name, "role": "member"},
                 preflight=False,
             )
-            shared.add_message(member, "team", result)
+            member_answer = extract_answer_for_handoff(result)
+            shared.add_message(member, "team", member_answer)
             outputs.append({
                 "agent": member,
                 "role": "member",
-                "output": result,
+                "output": member_answer,
             })
 
-        synthesis_task = (
-            f"Create a final team response for this task:\n{team_task}\n\n"
-            f"Team outputs:\n{shared.to_text()}"
-        )
+        synthesis_task = build_synthesis_task(team_task, shared.to_text())
         final = await self.agent_manager.run_agent(
             team_config.orchestrator,
             synthesis_task,
             debug=debug,
-            metadata={"team": team_config.name, "role": "synthesis"},
+            metadata={"team": team_config.name, "role": "synthesis", "memory_policy": "current_team_outputs_only"},
             preflight=False,
         )
+
+        final_answer = extract_answer_for_handoff(final)
+        quality = sanitize_final_answer(final_answer)
+        final = quality.answer
 
         return {
             "team": team_config.name,
             "task": team_task,
             "outputs": outputs,
             "final": final,
+            "quality": quality.to_dict(),
         }

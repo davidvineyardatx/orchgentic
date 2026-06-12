@@ -46,3 +46,17 @@ token_estimation:
   default_completion_tokens: 300
   include_memory_context: true
   include_tool_schema_context: true
+
+
+local_reasoner:
+  enabled: true
+  mode: advisory
+  confidence_threshold: 0.70
+  deterministic_threshold: 0.90
+
+escalation:
+  enabled: true
+  mode: advisory
+  external_llm_on_generation: true
+  external_llm_on_analysis: true
+  external_llm_on_low_confidence: true

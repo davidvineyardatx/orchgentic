@@ -4,7 +4,7 @@ agent:
   role: General Assistant
   description: Local development assistant powered by LM Studio.
   instructions: |
-    You are Bob, a helpful local AI assistant. Use memory, knowledge, and tools when relevant.
+    You are Bob, a helpful AI assistant. Use memory, knowledge, reasoning, and tools when relevant.
   timezone: America/Chicago
   locale: en-US
 
@@ -63,3 +63,36 @@ agent:
     gmail.delete:
       enabled: false
       require_confirmation: true
+
+   routing:
+    workflow:
+      enabled: true
+      multi_step_threshold: 0.80
+    event:
+      enabled: true
+      autonomous_events_require_policy_checks: true
+    policy:
+      enabled: true
+      block_disabled_tools_before_llm: true
+      hold_confirmation_tools_before_llm: true
+
+  reasoning:
+    planner: true
+    reflection: true
+    local_reasoner: true
+    confidence_scoring: true
+    confidence_high_threshold: 0.78
+    confidence_low_threshold: 0.52
+    escalation:
+      enabled: true
+      min_confidence: 0.52
+  memory:
+    enabled: true
+    recent_messages: 10
+    db_path: memory/orchgentic.db
+  knowledge:
+    enabled: true
+    top_k: 5
+    store: local
+    db_path: memory/orchgentic.db
+    collection: orchgentic_knowledge

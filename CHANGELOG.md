@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.7.11-alpha
+
+- Added advisory local reasoner layer
+- Added local confidence scoring
+- Added escalation decision engine
+- Added orchestration judgment debug output
+- Added `orch judge-route`
+
+
 ## v0.7.10.1-alpha
 
 - Added dynamic token-savings estimation
@@ -74,3 +83,11 @@ Includes:
 - Time context resolver
 - `datetime.local`
 - `tzdata` dependency for Windows timezone support
+
+## v0.7.12-alpha
+
+- Added workflow-aware routing classification.
+- Added event-aware routing context for manual, heartbeat, webhook, and scheduled runs.
+- Added policy-aware escalation gates that block disabled tools and hold confirmation-required tools before LLM calls.
+- Expanded `ORCHESTRATION_JUDGMENT` output with workflow, event, policy, and final decision sections.
+- Preserved the single-provider configuration rule. No fallback provider is defined under routing or escalation.

@@ -2,9 +2,37 @@ from pydantic import BaseModel, Field
 class ProviderConfig(BaseModel):
     type: str = "lmstudio"
     model: str = "qwen3"
+class EscalationConfig(BaseModel):
+    enabled: bool = True
+    min_confidence: float = 0.52
+
 class ReasoningConfig(BaseModel):
     planner: bool = True
     reflection: bool = True
+    local_reasoner: bool = True
+    confidence_scoring: bool = True
+    confidence_high_threshold: float = 0.78
+    confidence_low_threshold: float = 0.52
+    escalation: EscalationConfig = Field(default_factory=EscalationConfig)
+
+class WorkflowRoutingConfig(BaseModel):
+    enabled: bool = True
+    multi_step_threshold: float = 0.80
+
+class EventRoutingConfig(BaseModel):
+    enabled: bool = True
+    autonomous_events_require_policy_checks: bool = True
+
+class PolicyRoutingConfig(BaseModel):
+    enabled: bool = True
+    block_disabled_tools_before_llm: bool = True
+    hold_confirmation_tools_before_llm: bool = True
+
+class RoutingConfig(BaseModel):
+    workflow: WorkflowRoutingConfig = Field(default_factory=WorkflowRoutingConfig)
+    event: EventRoutingConfig = Field(default_factory=EventRoutingConfig)
+    policy: PolicyRoutingConfig = Field(default_factory=PolicyRoutingConfig)
+
 class MemoryConfig(BaseModel):
     enabled: bool = True
     recent_messages: int = 10
@@ -39,6 +67,7 @@ class AgentConfig(BaseModel):
     tool_runtime: ToolRuntimeConfig = Field(default_factory=ToolRuntimeConfig)
     delegation: DelegationConfig = Field(default_factory=DelegationConfig)
     reasoning: ReasoningConfig = Field(default_factory=ReasoningConfig)
+    routing: RoutingConfig = Field(default_factory=RoutingConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     knowledge: KnowledgeConfig = Field(default_factory=KnowledgeConfig)
     gmail: dict = Field(default_factory=dict)

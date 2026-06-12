@@ -8,6 +8,7 @@ from orchgentic.memory.manager import MemoryManager
 from orchgentic.knowledge.manager import KnowledgeManager
 from orchgentic.tools.registry import default_tool_registry
 from orchgentic.tools.runtime import ToolRuntime
+from orchgentic.core.reasoning.runtime_hooks import preflight_reasoning
 class AssistantAgent:
     def __init__(self, config, provider, planner=None, reflector=None, logger=None, memory=None, knowledge=None, tool_registry=None):
         self.config=config; self.provider=provider; self.planner=planner or Planner(); self.reflector=reflector or Reflector(); self.logger=logger or RunLogger(); self.memory=memory or MemoryManager(config.memory.db_path); self.knowledge=knowledge or KnowledgeManager(provider, config.knowledge.store, config.knowledge.db_path, config.knowledge.collection); self.tool_registry=tool_registry or default_tool_registry(self.memory, self.knowledge, source_agent_config=self.config)
@@ -17,7 +18,28 @@ class AssistantAgent:
         run=RunState(run_id=str(uuid.uuid4()), status=RunStatus.RUNNING); identity=AgentIdentity(self.config.id,self.config.name,self.config.role,self.config.description); metadata=metadata or {}
         self.logger.write(run.run_id,'TASK',task)
         if metadata: self.logger.write(run.run_id,'METADATA',metadata)
-        memory_context = self.memory.recent_context(identity.id,self.config.memory.recent_messages) if self.config.memory.enabled else ''
+        config_map = self.config.model_dump() if hasattr(self.config, 'model_dump') else self.config.dict()
+        preflight = preflight_reasoning(task, agent_config=config_map, available_tools=self._allowed_tools())
+        self.logger.write(run.run_id,'PREFLIGHT_REASONING',{
+            'local_decision': preflight.local_result.decision.value,
+            'local_confidence': preflight.local_result.confidence,
+            'confidence_score': preflight.confidence.score,
+            'confidence_band': preflight.confidence.band.value,
+            'escalation_action': preflight.escalation.action.value,
+            'escalation_reason': preflight.escalation.reason,
+            'suggested_tools': preflight.local_result.suggested_tools,
+        })
+        if preflight.local_result.local_answer and not preflight.escalation.should_call_llm:
+            answer = preflight.local_result.local_answer
+            self.logger.write(run.run_id,'ANSWER',answer)
+            run.complete()
+            return answer
+        if preflight.escalation.action.value == 'stop_with_error':
+            raise RuntimeError(preflight.escalation.reason)
+        # Team orchestration prompts already carry explicit shared context.
+        # Pulling unrelated historical memory into team roles/synthesis can contaminate final outputs.
+        use_memory_context = self.config.memory.enabled and not metadata.get('team')
+        memory_context = self.memory.recent_context(identity.id,self.config.memory.recent_messages) if use_memory_context else ''
         if memory_context: self.logger.write(run.run_id,'MEMORY_CONTEXT',memory_context)
         knowledge_context = await self.knowledge.context_for_query(task,self.config.knowledge.top_k) if self.config.knowledge.enabled else ''
         if knowledge_context: self.logger.write(run.run_id,'KNOWLEDGE_CONTEXT',knowledge_context)

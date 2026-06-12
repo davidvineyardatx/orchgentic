@@ -17,6 +17,9 @@ class RouteTelemetry:
     provider: str | None = None
     model: str | None = None
     token_estimate: dict | None = None
+    local_reasoner_confidence: float | None = None
+    escalation_reason: str | None = None
+    reasoning_level: str | None = None
 
 def build_route_telemetry(
     route_type: str,
@@ -30,6 +33,9 @@ def build_route_telemetry(
     provider=None,
     model=None,
     token_estimate=None,
+    local_reasoner_confidence=None,
+    escalation_reason=None,
+    reasoning_level=None,
 ) -> dict:
     return asdict(RouteTelemetry(
         timestamp=datetime.now(timezone.utc).isoformat(),
@@ -44,6 +50,9 @@ def build_route_telemetry(
         provider=provider,
         model=model,
         token_estimate=token_estimate,
+        local_reasoner_confidence=local_reasoner_confidence,
+        escalation_reason=escalation_reason,
+        reasoning_level=reasoning_level,
     ))
 
 def append_route_log(path: str | Path, event: dict) -> None:
