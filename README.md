@@ -1,116 +1,88 @@
 # Orchgentic
 
-**Orchgentic is an open-source orchestration runtime for autonomous and multi-agent AI systems.**
+Orchgentic is an open-source agent orchestration framework for building, routing, coordinating, and observing AI agents across tools, memory, knowledge, workflows, policies, and teams.
 
-Developer Preview: `v0.7.5-alpha`
+Instead of treating an agent as a single chatbot, Orchgentic gives developers a runtime for deciding how work should move through an agentic system: when to answer locally, when to call a tool, when to escalate to an LLM, when to block or hold an action for confirmation, and when to coordinate multiple specialist agents into a final response.
 
-Orchgentic helps developers configure and run AI agents with:
+## What Orchgentic offers in v0.7.12
 
-- YAML-first agent configuration
-- provider abstraction
-- tool runtime
-- planning and reflection
-- memory
-- semantic knowledge
-- triggers and webhooks
-- multi-agent teams
-- delegation
-- timezone-aware runtime tools
-- capability preflight checks
-- CLI-first workflows
-
-> Status: Developer Preview. Orchgentic is usable for experimentation, demos, and early developer feedback, but it is not yet a production-stable enterprise platform.
-
----
+- **Agent runtime** with YAML-based agent configuration.
+- **Provider abstraction** with one provider configured per agent.
+- **Local reasoning** to avoid unnecessary LLM calls for simple deterministic tasks.
+- **Confidence scoring and escalation** to decide when the configured LLM provider is needed.
+- **Workflow-aware routing** for single-step, multi-step, tool-driven, and team-driven tasks.
+- **Event-aware routing** for manual, heartbeat, webhook, and autonomous contexts.
+- **Policy-aware execution** for blocking disabled tools and holding sensitive actions for confirmation.
+- **Tool runtime** with built-in filesystem, web, datetime, memory, knowledge, and Gmail tools.
+- **Memory and knowledge layers** for storing conversational history and searchable knowledge.
+- **Team orchestration** for Manager / Researcher / Writer / Reviewer style workflows.
+- **Compressed team handoffs** to reduce token bloat and improve final synthesis quality.
+- **Debug and telemetry output** so routing, policy, tools, and team decisions are inspectable.
 
 ## Quickstart
 
 ```bash
-pip install -e .
-orch init
+python -m venv .venv
+source .venv/bin/activate  # macOS/Linux
+# or: .venv\Scripts\activate  # Windows PowerShell
+
+python -m pip install -e ".[dev]"
 orch list-agents
-orch list-tools --agent Bob
+orch inspect-agent Bob
 orch run Bob --debug
 ```
 
-Test local time support:
+When prompted for a task, try:
+
+```text
+what is the local time?
+```
+
+This should route directly to `datetime.local` without using an external LLM.
+
+## Example routing checks
+
+Preview what Orchgentic would do before execution:
 
 ```bash
-orch tool run datetime.local --agent Bob
+orch judge-route "what is the local time?" --agent Bob
+orch judge-route "delete gmail message id abcdef123456" --agent Bob
+orch judge-route "send an email to studio@example.com saying hello" --agent Bob
 ```
 
-Run a team:
+`judge-route` is inspection-only. It does not execute tools, send email, delete email, or run a workflow.
+
+## Example team run
 
 ```bash
-orch list-teams
-orch run-team ContentTeam --debug
+orch run-team contentteam --debug
 ```
 
----
+When prompted, enter:
 
-## Provider Setup
-
-Create a `.env` file from `.env.example`.
-
-### Groq
-
-```env
-GROQ_API_KEY=your_key_here
-GROQ_MODEL=llama-3.3-70b-versatile
+```text
+Research AI is changing how customers shop and create an Executive Summary
 ```
 
-Agent YAML:
+Orchgentic will coordinate the team and produce a final synthesized response.
 
-```yaml
-provider:
-  type: groq
-  model: llama-3.3-70b-versatile
+## Documentation
+
+- [Quickstart](docs/QUICKSTART.md)
+- [CLI Commands](docs/CLI_COMMANDS.md)
+- [Agent Configuration](docs/AGENT_CONFIGURATION.md)
+- [Team Configuration](docs/TEAM_CONFIGURATION.md)
+- [Tools and Policies](docs/TOOLS_AND_POLICIES.md)
+- [Routing and Reasoning](docs/ROUTING_AND_REASONING.md)
+- [Examples](docs/EXAMPLES.md)
+- [v0.7.12 Release Notes](docs/RELEASE_NOTES_V0_7_12.md)
+- [Known Limitations](docs/KNOWN_LIMITATIONS.md)
+
+## Core design rule
+
+```text
+provider = who answers when an LLM is needed
+reasoning / routing / policy = whether that provider should be used
 ```
 
-### OpenAI
-
-```env
-OPENAI_API_KEY=your_key_here
-OPENAI_MODEL=gpt-4o-mini
-```
-
-Agent YAML:
-
-```yaml
-provider:
-  type: openai
-  model: gpt-4o-mini
-```
-
----
-
-## Example agent timezone
-
-```yaml
-timezone: America/Chicago
-locale: en-US
-
-tools:
-  - datetime.now
-  - datetime.local
-```
-
-`datetime.now` returns UTC.  
-`datetime.local` returns local time based on the resolved Orchgentic time context.
-
----
-
-## Current limitations
-
-- Developer preview quality
-- No full DAG workflow engine yet
-- Email/webhook notification providers are scaffolded but not fully implemented
-- No hosted dashboard/UI yet
-- No enterprise RBAC yet
-- Provider API keys are required for hosted models
-
----
-
-## Roadmap
-
-See [`ROADMAP.md`](ROADMAP.md).
+Agents define one provider. Orchgentic decides whether that provider should be called.

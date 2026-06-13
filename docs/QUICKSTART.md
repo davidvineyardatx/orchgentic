@@ -1,409 +1,159 @@
-# Orchgentic Quickstart
+# Quickstart
 
-Get Orchgentic running locally in under 5 minutes.
+This guide walks through getting Orchgentic running locally, inspecting the included example agent, running a task, checking routes, and running a team workflow.
 
----
+## 1. Create and activate a virtual environment
 
-# Requirements
-
-Before installing Orchgentic, ensure you have:
-
-* Python 3.11+
-* Git
-* A supported AI provider API key
-
-Supported providers:
-
-* Groq
-* OpenAI
-
----
-
-# 1. Clone the Repository
-
-```bash
-git clone https://github.com/YOUR_USERNAME/orchgentic.git
-cd orchgentic
-```
-
----
-
-# 2. Create Virtual Environment
-
-## Windows
+From the project root:
 
 ```bash
 python -m venv .venv
-.venv\Scripts\activate
 ```
 
----
+Activate it.
 
-## macOS / Linux
+Windows PowerShell:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+Git Bash / macOS / Linux:
 
 ```bash
-python3 -m venv .venv
 source .venv/bin/activate
 ```
 
----
-
-# 3. Install Orchgentic
+## 2. Install Orchgentic in editable mode
 
 ```bash
-pip install -e .
+python -m pip install -e ".[dev]"
 ```
 
-This installs:
+The `dev` extra installs the test dependencies used by the project, including `pytest` and `pytest-asyncio`.
 
-* the `orch` CLI
-* Orchgentic runtime
-* providers
-* tools
-* orchestration runtime
-* timezone support (`tzdata`)
-
----
-
-# 4. Configure Environment Variables
+## 3. Configure environment variables
 
 Create a `.env` file in the project root.
 
----
-
-## Groq Example
+For Groq:
 
 ```env
-GROQ_API_KEY=your_api_key_here
-GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_API_KEY=your_groq_api_key_here
 ```
 
----
-
-## OpenAI Example
+For OpenAI, if using an OpenAI provider config:
 
 ```env
-OPENAI_API_KEY=your_api_key_here
-OPENAI_MODEL=gpt-4o-mini
+OPENAI_API_KEY=your_openai_api_key_here
 ```
 
----
+Gmail tools require a Gmail OAuth connection. See [Tools and Policies](TOOLS_AND_POLICIES.md).
 
-# 5. Initialize Orchgentic Workspace
+## 4. Validate the install
 
 ```bash
-orch init
+python -m pytest -q
 ```
 
-This creates:
-
-* agents/
-* teams/
-* memory/
-* knowledge/
-* triggers/
-* logs/
-
----
-
-# 6. Create Your First Agent
-
-```bash
-orch create agent Bob
-```
-
-Expected output:
+Expected result should look similar to:
 
 ```text
-Created agent:
-agents/bob.yaml
+53 passed
 ```
 
----
+The exact number may change as tests are added.
 
-# 7. Configure the Agent
-
-Open:
-
-```text
-agents/bob.yaml
-```
-
-Example configuration:
-
-```yaml
-agent:
-  id: bob
-  name: Bob
-  role: General Assistant
-
-  timezone: America/Chicago
-  locale: en-US
-
-  provider:
-    type: groq
-    model: llama-3.3-70b-versatile
-
-  capabilities:
-    - web.request
-    - datetime.local
-    - memory.search
-    - knowledge.search
-
-  tools:
-    - web.request
-    - datetime.local
-    - memory.search
-    - knowledge.search
-
-  reasoning:
-    planner: true
-    reflection: true
-
-  memory:
-    enabled: true
-```
-
----
-
-# 8. List Agents
+## 5. List available agents
 
 ```bash
 orch list-agents
 ```
 
----
+Example output:
 
-# 9. Run Your First Agent
+```text
+Bob (bob) - General Assistant
+Manager (manager) - Team Manager
+Researcher (researcher) - Research Specialist
+Writer (writer) - Writing Specialist
+Reviewer (reviewer) - Review Specialist
+```
+
+## 6. Inspect Bob
+
+```bash
+orch inspect-agent Bob
+```
+
+This shows Bob's provider, capabilities, tools, and delegation settings.
+
+## 7. Run Bob
 
 ```bash
 orch run Bob --debug
 ```
 
-Example prompt:
+When prompted:
 
 ```text
-Summarize the latest trends in Product Marketing.
+Task: what is the local time?
 ```
 
----
+Expected behavior:
 
-# 10. Test the Tool Runtime
+- Orchgentic routes directly to `datetime.local`.
+- `external_llm_used` is `false`.
+- The answer uses Bob's configured timezone and locale.
+
+## 8. Preview routing without executing
+
+```bash
+orch judge-route "delete gmail message id abcdef123456" --agent Bob
+```
+
+Expected behavior with the sample Bob policy:
+
+```text
+policy.action: block
+reason: Tool 'gmail.delete' is disabled by policy.
+external_llm_allowed: false
+```
+
+## 9. Run a direct tool call
 
 ```bash
 orch tool run datetime.local --agent Bob
 ```
 
-Expected output:
+For a Gmail send with confirmation:
+
+```bash
+orch tool run gmail.send \
+  --agent Bob \
+  --arg to=studio@example.com \
+  --arg subject="Hello from Orchgentic" \
+  --arg body="This is a confirmed tool execution." \
+  --arg confirm=true
+```
+
+## 10. Run ContentTeam
+
+```bash
+orch run-team contentteam --debug
+```
+
+When prompted:
 
 ```text
-timezone='America/Chicago'
-weekday='Saturday'
-time='08:48:28'
+Research AI is changing how customers shop and create an Executive Summary
 ```
 
----
-
-# 11. Create Your First Team
-
-```bash
-orch create team ContentTeam
-```
-
----
-
-# 12. List Teams
-
-```bash
-orch list-teams
-```
-
----
-
-# 13. Run a Team
-
-```bash
-orch run-team ContentTeam --debug
-```
-
-Example orchestration flow:
-
-```text
-ManagerAgent
-    ↓
-ResearchAgent
-    ↓
-WriterAgent
-    ↓
-ReviewerAgent
-    ↓
-Final Output
-```
-
----
-
-# Common Commands
-
-## Workspace
-
-```bash
-orch init
-```
-
----
-
-## Agents
-
-```bash
-orch create agent Bob
-orch list-agents
-orch run Bob
-```
-
----
-
-## Teams
-
-```bash
-orch create team ContentTeam
-orch list-teams
-orch run-team ContentTeam
-```
-
----
-
-## Tools
-
-```bash
-orch list-tools --agent Bob
-orch tool run datetime.local --agent Bob
-```
-
----
-
-## Memory
-
-```bash
-orch memory search "Product Marketing"
-```
-
----
-
-## Knowledge
-
-```bash
-orch knowledge ingest docs/
-orch knowledge search "marketing trends"
-```
-
----
-
-# Recommended First Demo Flow
-
-For first-time users:
-
-1. `orch init`
-2. `orch create agent Bob`
-3. `orch list-agents`
-4. `orch run Bob --debug`
-5. `orch tool run datetime.local --agent Bob`
-6. `orch create team ContentTeam`
-7. `orch list-teams`
-8. `orch run-team ContentTeam --debug`
-
-This demonstrates:
-
-* runtime initialization
-* provider integration
-* agent execution
-* tool runtime
-* orchestration
-* delegation
-* team execution
-
----
-
-# Troubleshooting
-
-## Missing API Key
-
-Example error:
-
-```text
-ProviderError: Missing GROQ_API_KEY
-```
-
-Solution:
-
-* verify `.env`
-* restart terminal session
-* confirm provider configuration
-
----
-
-## Tool Not Found
-
-Example error:
-
-```text
-Tool not found: datetime.local
-```
-
-Solution:
-
-* verify tool exists in `tools`
-* confirm tool included in agent YAML
-* reinstall package:
-
-```bash
-pip install -e .
-```
-
----
-
-## Invalid Timezone
-
-Example error:
-
-```text
-Unknown timezone 'America/Chicago'
-```
-
-Solution:
-
-* ensure `tzdata` installed
-* use valid IANA timezone names
-
----
-
-# Current Status
-
-Developer Preview:
-`v0.7.5-alpha`
-
-Current focus:
-
-* runtime stabilization
-* orchestration reliability
-* observability foundations
-* provider maturity
-* workflow orchestration
-
----
-
-# Next Steps
-
-After completing Quickstart:
-
-* review `EXAMPLES.md`
-* explore orchestration flows
-* create specialized agents
-* build multi-agent teams
-* test triggers and webhooks
-* experiment with delegation and memory
-
----
-
-# Orchgentic
-
-### Coordinate. Scale. Observe. Autonomous AI Systems.
+Expected behavior:
+
+- Manager assigns work.
+- Researcher provides findings.
+- Writer drafts the executive summary.
+- Reviewer gives improvement guidance.
+- Orchgentic synthesizes a final answer.
+- Debug output shows compressed team handoffs instead of nested run transcripts.

@@ -2,7 +2,7 @@ agent:
   id: bob
   name: Bob
   role: General Assistant
-  description: Local development assistant powered by LM Studio.
+  description: General-purpose AI assistant.
   instructions: |
     You are Bob, a helpful AI assistant. Use memory, knowledge, reasoning, and tools when relevant.
   timezone: America/Chicago
@@ -52,7 +52,7 @@ agent:
       send_policy:
         mode: restricted
         allowed_addresses:
-          - studio@davidvineyard.com
+          - studio@example.com
         allowed_domains: []
         require_confirmation: true
 
@@ -64,7 +64,7 @@ agent:
       enabled: false
       require_confirmation: true
 
-   routing:
+  routing:
     workflow:
       enabled: true
       multi_step_threshold: 0.80
@@ -86,10 +86,12 @@ agent:
     escalation:
       enabled: true
       min_confidence: 0.52
+
   memory:
     enabled: true
     recent_messages: 10
     db_path: memory/orchgentic.db
+
   knowledge:
     enabled: true
     top_k: 5

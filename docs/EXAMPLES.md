@@ -1,436 +1,175 @@
-# Orchgentic Examples
+# Examples
 
-This document contains practical examples for using Orchgentic to build autonomous and multi-agent AI systems.
+These examples are designed to show how Orchgentic behaves in real use.
 
----
+## Example 1: Local time without LLM
 
-# Example 1 — Create an Agent
-
-## Create a New Agent
-
-```bash
-orch create agent Bob
-```
-
-Expected result:
-
-```text
-Created agent:
-agents/bob.yaml
-```
-
----
-
-## List Agents
-
-```bash
-orch list-agents
-```
-
----
-
-## Run an Agent
+Run Bob:
 
 ```bash
 orch run Bob --debug
 ```
 
-Example prompt:
+Task:
 
 ```text
-Summarize the latest trends in Product Marketing.
+what is the local time?
 ```
 
----
+Expected behavior:
 
-## Example Agent Configuration
-
-```yaml
-agent:
-  id: bob
-  name: Bob
-  role: General Assistant
-
-  timezone: America/Chicago
-  locale: en-US
-
-  provider:
-    type: groq
-    model: llama-3.3-70b-versatile
-
-  capabilities:
-    - web.request
-    - datetime.local
-    - memory.search
-    - knowledge.search
-
-  tools:
-    - web.request
-    - datetime.local
-    - memory.search
-    - knowledge.search
-
-  reasoning:
-    planner: true
-    reflection: true
-
-  memory:
-    enabled: true
+```text
+selected_tool: datetime.local
+external_llm_used: false
+reasoning_level: local_tool
 ```
 
----
+Why it matters:
 
-# Example 2 — Create a Team
+Orchgentic should not spend tokens on an external LLM when a deterministic tool can safely answer the task.
 
-## Create a Team
+## Example 2: Preview a blocked Gmail delete
 
 ```bash
-orch create team ContentTeam
+orch judge-route "delete gmail message id abcdef123456" --agent Bob
+```
+
+With this policy:
+
+```yaml
+gmail.delete:
+  enabled: false
+  require_confirmation: true
 ```
 
 Expected result:
 
 ```text
-Created team:
-teams/contentteam.yaml
+intent: gmail_delete
+required_tools: ['gmail.delete']
+policy.action: block
+escalation.escalate: false
+external_llm_allowed: false
 ```
 
----
+Why it matters:
 
-## List Teams
+Disabled tools remain blocked. Confirmation cannot override `enabled: false`.
+
+## Example 3: Preview a confirmation-required Gmail send
 
 ```bash
-orch list-teams
+orch judge-route "send an email to studio@example.com saying hello" --agent Bob
 ```
 
----
-
-## Run a Team
-
-```bash
-orch run-team ContentTeam --debug
-```
-
----
-
-## Example Team Architecture
-
-```text
-ManagerAgent
-    ↓
-ResearchAgent
-    ↓
-WriterAgent
-    ↓
-ReviewerAgent
-    ↓
-Final Output
-```
-
----
-
-## Example Use Case
-
-Prompt:
-
-```text
-Create a technical blog post explaining autonomous AI orchestration platforms.
-```
-
-Expected orchestration behavior:
-- ResearchAgent gathers information
-- WriterAgent drafts content
-- ReviewerAgent validates quality
-- ManagerAgent assembles final output
-
----
-
-# Example 3 — Tool Runtime
-
-## Run a Tool Directly
-
-```bash
-orch tool run datetime.local --agent Bob
-```
-
-Expected output:
-
-```text
-timezone='America/Chicago'
-weekday='Saturday'
-time='08:48:28'
-```
-
----
-
-## Example Web Request
-
-```text
-Research the latest developments in Product Marketing automation.
-```
-
-The agent can dynamically invoke:
-
-```text
-web.request
-```
-
-during execution.
-
----
-
-# Example 4 — Delegation
-
-## Example Delegation Flow
-
-```text
-ManagerAgent
-  └── delegates research to ResearchAgent
-  └── delegates writing to WriterAgent
-  └── delegates validation to ReviewerAgent
-```
-
-This allows:
-- specialization
-- parallel reasoning
-- modular orchestration
-
----
-
-# Example 5 — Memory Retrieval
-
-## Search Memory
-
-```bash
-orch memory search "Product Marketing"
-```
-
-Agents can retrieve:
-- prior conversations
-- prior outputs
-- runtime context
-- execution history
-
----
-
-# Example 6 — Semantic Knowledge
-
-## Ingest Knowledge
-
-```bash
-orch knowledge ingest docs/
-```
-
----
-
-## Search Knowledge
-
-```bash
-orch knowledge search "product marketing trends"
-```
-
-Agents can use semantic retrieval during execution.
-
----
-
-# Example 7 — Scheduled Autonomous Agent
-
-## Heartbeat Trigger
+With this policy:
 
 ```yaml
-trigger:
-  type: heartbeat
-  interval_seconds: 3600
+gmail.send:
+  enabled: true
+  require_confirmation: true
 ```
 
-Example behavior:
-- run every hour
-- gather research
-- generate summary
-- store results in memory
-
----
-
-# Example 8 — Webhook-Triggered Workflow
-
-## Webhook Runtime
-
-Example:
-- external system sends webhook
-- Orchgentic trigger receives event
-- orchestration pipeline executes automatically
-
-Example use cases:
-- ticket triage
-- incident response
-- automated reporting
-- content generation
-- AI workflow automation
-
----
-
-# Example 9 — Capability Preflight
-
-Before execution, Orchgentic validates:
-- required tools
-- provider configuration
-- team references
-- orchestration dependencies
-
-Example failure:
+Expected result:
 
 ```text
-ERROR: Agent requires tool 'web.request' but it is not configured.
+intent: gmail_send
+required_tools: ['gmail.send']
+policy.action: hold_for_confirmation
+escalation.escalate: false
+external_llm_allowed: false
 ```
 
-This prevents:
-- wasted LLM calls
-- orchestration failures
-- silent runtime degradation
+Why it matters:
 
----
+Orchgentic should not call a provider or execute a sensitive tool when the task requires confirmation.
 
-# Example 10 — Timezone-Aware Runtime
-
-## Example Agent Time Context
-
-```yaml
-timezone: America/Chicago
-locale: en-US
-```
-
-## Example Tool
+## Example 4: Send email with direct tool confirmation
 
 ```bash
-orch tool run datetime.local --agent Bob
+orch tool run gmail.send \
+  --agent Bob \
+  --arg to=studio@example.com \
+  --arg subject="Saying Hello" \
+  --arg body="Hello. This message was sent by Orchgentic with confirmation." \
+  --arg confirm=true
 ```
 
-Returns:
-- localized time
-- timezone
-- weekday
-- UTC offset
-
-This enables:
-- scheduled workflows
-- region-aware orchestration
-- cloud-safe execution
-
----
-
-# Example 11 — Long-Running Research Workflow
-
-## Example Scenario
-
-Prompt:
+Expected result:
 
 ```text
-Research current Product Marketing strategies and create an executive summary.
+ToolResult(success=True, tool_name='gmail.send', data={...}, error=None)
 ```
 
-Potential orchestration flow:
+Why it matters:
+
+Confirmed direct tool execution is explicit and auditable.
+
+## Example 5: Run ContentTeam
+
+```bash
+orch run-team contentteam --debug
+```
+
+Task:
 
 ```text
-ManagerAgent
-    ↓
-ResearchAgent
-    ↓
-Knowledge Retrieval
-    ↓
-WriterAgent
-    ↓
-ReviewerAgent
-    ↓
-Final Summary
+Research AI is changing how customers shop and create an Executive Summary
 ```
 
-Features involved:
-- web research
-- semantic retrieval
-- memory
-- delegation
-- orchestration
-- reflection
-
----
-
-# Example 12 — Autonomous Reporting System
-
-## Example Goal
-
-Generate daily Product Marketing reports automatically.
-
-Workflow:
-1. heartbeat trigger fires
-2. research agents gather data
-3. writer agent summarizes findings
-4. reviewer validates output
-5. report stored to filesystem
-6. future notification system distributes report
-
----
-
-# Example 13 — Future Workflow DAG Engine
-
-Planned future orchestration:
+Expected behavior:
 
 ```text
-START
-  ↓
-Research
-  ↓
-Branch:
-  ├── Technical Summary
-  ├── Executive Summary
-  └── Social Content
-  ↓
-Review
-  ↓
-Publish
+TEAM FINAL
+<polished final response>
+
+TEAM OUTPUTS
+Manager -> concise assignment
+Researcher -> research findings
+Writer -> draft
+Reviewer -> review feedback
 ```
 
-This will evolve into:
-- visual workflows
-- conditional routing
-- retries
-- persistent workflow state
+Why it matters:
 
----
+Team handoffs are compressed in v0.7.12. Orchgentic passes useful answer content forward instead of nested debug transcripts, reducing token usage and improving synthesis quality.
 
-# Recommended Demo Flow
+## Example 6: Ingest and search knowledge
 
-For first-time users:
+Create a file:
 
-1. `orch init`
-2. `orch create agent Bob`
-3. `orch list-agents`
-4. `orch run Bob --debug`
-5. `orch tool run datetime.local --agent Bob`
-6. `orch create team ContentTeam`
-7. `orch list-teams`
-8. `orch run-team ContentTeam --debug`
+```text
+knowledge/orchgentic_overview.txt
+```
 
-This demonstrates:
-- runtime initialization
-- agent creation
-- team creation
-- tool runtime
-- provider integration
-- orchestration
-- delegation
-- team execution
+Add content:
 
----
+```text
+Orchgentic is an open-source agent orchestration framework for routing, coordinating, and observing AI agents.
+```
 
-# Current Focus
+Ingest it:
 
-The current Orchgentic release is focused on:
+```bash
+orch knowledge ingest knowledge/orchgentic_overview.txt --agent Bob
+```
 
-- runtime stabilization
-- orchestration reliability
-- provider resilience
-- observability foundations
-- operational maturity
+Search it:
 
-Developer Preview:
-`v0.7.5-alpha`
+```bash
+orch knowledge search "What is Orchgentic?" --agent Bob
+```
+
+Why it matters:
+
+Knowledge gives agents access to durable project or domain information.
+
+## Example 7: Search memory
+
+```bash
+orch memory search "AI shopping" --agent Bob
+```
+
+Why it matters:
+
+Memory can help an agent recall prior interactions, but team synthesis in v0.7.12 avoids unrelated prior memory by default to reduce contamination.
