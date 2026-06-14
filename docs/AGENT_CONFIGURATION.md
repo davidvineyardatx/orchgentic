@@ -11,7 +11,7 @@ agent:
   id: bob
   name: Bob
   role: General Assistant
-  description: Local development assistant.
+  description: General-purpose AI assistant.
   instructions: |
     You are Bob, a helpful AI assistant. Use memory, knowledge, reasoning, and tools when relevant.
   timezone: America/Chicago
@@ -133,7 +133,7 @@ orch run Bob
 ### `description` and `instructions`
 
 ```yaml
-description: Local development assistant.
+description: General-purpose AI assistant.
 instructions: |
   You are Bob, a helpful AI assistant. Use memory, knowledge, reasoning, and tools when relevant.
 ```

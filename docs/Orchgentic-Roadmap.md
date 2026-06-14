@@ -1,404 +1,397 @@
 # Orchgentic Roadmap
 
-## Vision
+Orchgentic is an open-source agent orchestration framework for building, routing, coordinating, and observing AI agents across tools, memory, knowledge, workflows, events, policies, and teams.
 
-Orchgentic is being built as a next-generation orchestration runtime for autonomous and multi-agent AI systems.
-
-The long-term goal is to provide a unified platform for:
-
-* autonomous AI operations
-* multi-agent coordination
-* tool-driven execution
-* workflow orchestration
-* observability
-* distributed runtime infrastructure
-* human + AI operational systems
+This roadmap reflects the current direction of Orchgentic after the v0.7.12 release series, which added local reasoning, confidence scoring, workflow-aware routing, policy-aware escalation, Gmail tool safety, and improved team synthesis.
 
 ---
 
-# Current Status
+## Where Orchgentic Is Today
 
-### Developer Preview — v0.7.5-alpha
+Orchgentic has moved beyond a basic agent runner. It now provides the foundation for governed, inspectable, multi-agent orchestration.
 
-Current release focus:
+The current platform can:
 
-* runtime stabilization
-* orchestration reliability
-* developer experience
-* provider maturity
-* structured runtime behavior
+- Run configurable agents from YAML
+- Use pluggable LLM providers
+- Route simple tasks directly to tools
+- Avoid unnecessary LLM calls with local reasoning
+- Score confidence before escalation
+- Use memory and knowledge when relevant
+- Execute tools through a registry
+- Enforce tool policies before execution
+- Require confirmation for sensitive actions
+- Block disabled tools before LLM escalation
+- Coordinate teams of specialized agents
+- Compress team handoffs to reduce token usage
+- Synthesize final team responses
+- Provide debug output for routing, tools, plans, reflection, and policy decisions
 
----
-
-# Completed Foundation Layer
-
-The core orchestration runtime is now operational.
-
-## Sprint 1 — Core Runtime
-
-Completed:
-
-* package structure
-* CLI runtime
-* YAML agents
-* provider abstraction
-* runtime initialization
-
-Key Result:
-
-* configurable autonomous agents
+The v0.7.x release line established Orchgentic's core orchestration foundation.
 
 ---
 
-## Sprint 2 — Planning + Reflection
+## Completed in v0.7.x
 
-Completed:
+### Core Runtime
 
-* planner system
-* reflection engine
-* structured reasoning
+Orchgentic supports a CLI-first runtime with YAML-based agent configuration.
 
-Key Result:
+Completed foundation work includes:
 
-* agents capable of iterative reasoning workflows
+- Package/runtime structure
+- Agent loading
+- CLI execution
+- Provider abstraction
+- Runtime configuration
+- Planning and reflection
+- Memory support
+- Knowledge search support
+- Tool registry and tool execution
+- Trigger foundation
+- Webhook and heartbeat concepts
 
----
+### Multi-Agent Orchestration
 
-## Sprint 3 — Memory Layer
+Orchgentic supports team-based workflows where multiple agents contribute to a shared task.
 
-Completed:
+Examples include:
 
-* SQLite memory
-* episodic memory
-* memory search
-* memory CLI tooling
+- Manager
+- Researcher
+- Writer
+- Reviewer
+- Final synthesis
 
-Key Result:
+This enables coordinated work across multiple specialized agents instead of relying on one general-purpose agent for every task.
 
-* persistent runtime memory
+### Local Reasoning
 
----
+Orchgentic includes a local reasoning layer that can inspect a task before calling an external LLM.
 
-## Sprint 4 — Triggers + Webhooks
+Local reasoning can determine whether a task should:
 
-Completed:
+- Be answered locally
+- Use a deterministic tool route
+- Run through a workflow
+- Escalate to the configured LLM provider
+- Stop because of policy restrictions
 
-* heartbeat triggers
-* webhook runtime
-* dispatcher system
-* autonomous execution loops
-
-Key Result:
-
-* event-driven and scheduled agents
-
----
-
-## Sprint 5 — Knowledge Layer
-
-Completed:
-
-* semantic memory
-* embeddings abstraction
-* local vector storage
-* Zilliz-ready adapter
-* ingestion/search tooling
-
-Key Result:
-
-* semantic knowledge retrieval
-
----
-
-## Sprint 6 — Tool Runtime
-
-Completed:
-
-* tool schemas
-* tool execution runtime
-* built-in tools
-* permissions
-* runtime orchestration
-
-Key Result:
-
-* dynamic tool-using agents
-
----
-
-## Sprint 7 — Multi-Agent Orchestration
-
-Completed:
-
-* delegation
-* teams
-* shared context
-* orchestrator runtime
-* agent registry
-* agent-to-agent execution
-
-Key Result:
-
-* coordinated multi-agent systems
-
----
-
-# Current Stabilization Phase
-
-## Runtime Hardening (v0.7.x)
-
-Current stabilization focus:
-
-### Reliability
-
-* recursion protection
-* timeout handling
-* retry handling
-* graceful failures
-* provider fallback handling
-
-### Tool Runtime
-
-* tool continuation loop
-* malformed tool handling
-* tool capability validation
-* preflight execution validation
-
-### Orchestration
-
-* delegation reliability
-* shared context integrity
-* long-running workflow stability
-* orchestration consistency
-
-### Time Context
-
-* timezone-aware runtime
-* UTC + local context handling
-* multi-region support
-* cloud runtime consistency
-
-### Error System
-
-* structured severity levels
-* logging standardization
-* future notification integration
-* runtime traceability
-
----
-
-# Next Planned Runtime Layer
-
-## Sprint 8 — Workflow Graph Engine
-
-Status:
-
-* planned
-
-Goal:
-
-* move from orchestration runtime into workflow orchestration
-
-Planned features:
-
-* workflow DAG execution
-* branching logic
-* retries
-* conditional routing
-* state transitions
-* sequential pipelines
-* workflow persistence
-
-Strategic Importance:
-
-* foundational for visual orchestration
-
----
-
-# Future Platform Layers
-
-## Sprint 9 — Plugin SDK + Ecosystem
-
-Planned:
-
-* installable plugins
-* external tools
-* provider extensions
-* runtime package loading
-* versioned plugins
-
-Goal:
-
-* transform Orchgentic into an extensible ecosystem
-
----
-
-## Sprint 10 — Authentication + Security
-
-Planned:
-
-* OAuth flows
-* encrypted secrets
-* JWT authentication
-* API keys
-* role permissions
-* workspace isolation
-
-Goal:
-
-* enterprise-ready runtime security
-
----
-
-## Sprint 11 — API Server + Remote Runtime
-
-Planned:
-
-* REST API
-* WebSocket runtime
-* remote orchestration
-* SDK support
-* external execution interfaces
-
-Goal:
-
-* hosted and remote execution support
-
----
-
-## Sprint 12 — No-Code Studio
-
-Planned:
-
-* visual orchestration builder
-* workflow editor
-* tool management
-* execution logs
-* observability interface
-* drag-and-drop orchestration
-
-Goal:
-
-* lower onboarding friction for non-developers
-
----
-
-## Sprint 13 — Observability + Telemetry
-
-Planned:
-
-* runtime traces
-* event replay
-* orchestration graphs
-* token accounting
-* cost tracking
-* performance metrics
-
-Goal:
-
-* production-grade operational visibility
-
----
-
-## Sprint 14 — Distributed Execution
-
-Planned:
-
-* distributed workers
-* queues
-* remote agents
-* scaling infrastructure
-* container execution
-* swarm orchestration
-
-Goal:
-
-* enterprise-scale autonomous infrastructure
-
----
-
-# Open-Core Strategy
-
-Orchgentic is being developed with an open-core philosophy.
-
-## Open-Source Runtime Layer
-
-Planned open-source areas:
-
-* orchestration runtime
-* agents
-* tools
-* memory
-* knowledge
-* triggers
-* teams
-* delegation
-* providers
-
----
-
-## Future Commercial Platform Layer
-
-Potential future commercial layers:
-
-* hosted orchestration platform
-* observability dashboard
-* enterprise governance
-* deployment tooling
-* workflow studio
-* managed infrastructure
-* operational analytics
-
----
-
-# Design Principles
-
-Orchgentic is built around several core principles:
-
-1. Agents are runtimes, not prompts.
-2. Orchestration matters more than isolated intelligence.
-3. Autonomous systems require observability.
-4. Reliability matters more than feature count.
-5. Tools, memory, and workflows must operate coherently.
-6. YAML-first configuration lowers onboarding friction.
-7. Open ecosystems scale faster than closed systems.
-
----
-
-# Current Priority
-
-The immediate focus is:
+Example:
 
 ```text
-Operational maturity over feature expansion.
+"What is the local time?"
+→ routed directly to datetime.local
+→ external_llm_used: false
 ```
 
-Priority areas:
+### Confidence Scoring and Escalation
 
-* runtime reliability
-* orchestration consistency
-* stabilization
-* provider maturity
-* developer experience
-* documentation
-* observability foundations
+The reasoning layer scores confidence before deciding whether to escalate.
+
+This allows Orchgentic to avoid unnecessary LLM calls for simple tasks while still using the configured provider for generation, analysis, or complex reasoning.
+
+Design rule:
+
+```text
+provider = who answers when an LLM is needed
+reasoning / routing / policy = whether the provider should be used
+```
+
+### Workflow-Aware Routing
+
+Orchgentic can now judge whether a task is likely:
+
+- Single-step
+- Multi-step
+- Tool-driven
+- Workflow-driven
+- Team-oriented
+- LLM-required
+
+This provides a stronger foundation for future workflow execution and planning.
+
+### Event-Aware Routing
+
+The routing layer understands execution context, including:
+
+- Manual interactive runs
+- Heartbeat-triggered runs
+- Webhook-triggered runs
+- Autonomous execution contexts
+
+This allows stricter checks when tasks run autonomously.
+
+### Policy-Aware Escalation
+
+Policies are evaluated before tool execution or external LLM escalation.
+
+This supports safer handling of sensitive actions such as email sending, replying, and deletion.
+
+Examples:
+
+```text
+delete gmail message id abcdef123456
+→ gmail.delete detected
+→ blocked because gmail.delete is disabled
+→ external_llm_allowed: false
+```
+
+```text
+send an email to studio@example.com saying hello
+→ gmail.send detected
+→ held for confirmation
+→ external_llm_allowed: false until confirmed
+```
+
+### Intent Precedence
+
+The router now gives action verbs priority over object nouns.
+
+For example:
+
+```text
+delete gmail message id abcdef123456
+→ intent: gmail_delete
+→ required_tools: ["gmail.delete"]
+```
+
+This avoids confusing destructive actions with read-only actions just because a phrase includes "message id".
+
+### Team Synthesis Improvements
+
+Team outputs are now cleaner and more efficient.
+
+Improvements include:
+
+- Current-run-only context
+- Reduced memory contamination
+- Compressed team handoffs
+- Structured output unwrapping
+- Placeholder resource suppression
+- Cleaner final synthesis
+- Lower token usage during team workflows
 
 ---
 
-# Long-Term Direction
+## Current Documentation Priority
 
-Orchgentic is evolving toward:
+The immediate priority is making Orchgentic easy to install, configure, run, and understand.
+
+Documentation should focus on step-by-step usage.
+
+Planned and current documentation includes:
+
+- Main README
+- Quickstart guide
+- CLI command reference
+- Agent YAML configuration guide
+- Team YAML configuration guide
+- Tools and policy guide
+- Routing and reasoning guide
+- Examples guide
+- Known limitations
+- Release notes
+
+The documentation should make it easy for a new user to understand:
+
+- What Orchgentic is
+- What problem it solves
+- How to configure an agent
+- How to run an agent
+- How to inspect a route
+- How tool policies work
+- How confirmation works
+- How teams work
+- How local reasoning saves cost and latency
+
+---
+
+## Next Engineering Milestone: v0.8.0 Observability
+
+The next major engineering focus should be observability.
+
+As Orchgentic becomes more capable, users need to see what happened inside each run.
+
+Planned v0.8.0 work:
+
+- Run history
+- Routing traces
+- Tool call traces
+- Policy decision logs
+- Team handoff traces
+- Escalation logs
+- Token estimate tracking
+- Local reasoning savings estimates
+- Error classification visibility
+- Dashboard-ready event records
+
+Users should be able to answer:
+
+- Which agent handled the task?
+- Which route was selected?
+- Was an external LLM used?
+- Which tools were called?
+- Was anything blocked by policy?
+- Was confirmation required?
+- What did each team member contribute?
+- How much context was passed?
+- How many tokens were likely saved?
+
+This is a natural next step because Orchgentic's value is not only executing agents, but making agent execution inspectable and governable.
+
+---
+
+## Future Milestone: Local LLM Provider Support
+
+True local LLM support is planned, but it is intentionally separate from local reasoning.
+
+Important distinction:
 
 ```text
-A unified orchestration platform for autonomous AI systems.
+Local reasoning decides whether an LLM is needed.
+A local LLM provider generates the response when an LLM is needed.
 ```
 
-Including:
+Future local provider support may include:
 
-* autonomous operations
-* workflow execution
-* AI coordination infrastructure
-* distributed agent systems
-* human + AI operational environments
-* orchestration observability
-* enterprise runtime infrastructure
+- LM Studio
+- Ollama
+- llama.cpp-compatible endpoints
+- Other OpenAI-compatible local endpoints
+
+Planned capabilities:
+
+- Local model provider configuration
+- Provider health checks
+- Model availability checks
+- Better local provider errors
+- Local-first generation options
+- Fallback behavior through normal provider configuration
+
+---
+
+## Future Milestone: Dashboard and UI
+
+Once observability data is available, Orchgentic can support a dashboard or UI layer.
+
+Dashboard goals:
+
+- View agent runs
+- View team runs
+- Inspect routing decisions
+- Inspect local reasoning decisions
+- Inspect tool calls
+- Inspect policy decisions
+- Review memory and knowledge usage
+- Review errors and warnings
+- Track estimated token savings
+- Manage agent and team configurations
+
+---
+
+## Future Milestone: No-Code / Low-Code Builder
+
+A long-term goal is to make Orchgentic usable by non-developers through a no-code or low-code interface.
+
+Builder goals:
+
+- Create agents visually
+- Configure providers
+- Configure tools
+- Configure memory and knowledge
+- Configure policies
+- Build teams
+- Build workflows
+- Configure triggers
+- Test routes before execution
+- Review run history and outputs
+
+This would allow users to build agentic workflows without directly editing YAML.
+
+---
+
+## Future Milestone: Plugin and Connector Ecosystem
+
+Orchgentic should eventually support a broader plugin model for tools and connectors.
+
+Potential plugin categories:
+
+- Email
+- Calendar
+- CRM
+- Files
+- Databases
+- Web search
+- Internal APIs
+- Project management
+- Messaging
+- E-commerce
+- Analytics
+
+Plugin goals:
+
+- Standard plugin interface
+- Tool manifest format
+- Connector registration
+- Safer permission boundaries
+- Community-contributed tools
+- Optional marketplace-style discovery
+
+---
+
+## Future Milestone: Production Hardening
+
+Before a stable 1.0 release, Orchgentic will need additional production-focused work.
+
+Production goals:
+
+- Stronger error handling
+- Retry policies
+- Rate-limit handling
+- Secrets management guidance
+- Provider failure handling
+- Test coverage expansion
+- Security review
+- Policy enforcement review
+- Documentation completeness
+- Packaging and install polish
+
+---
+
+## Version Direction
+
+```text
+v0.7.x
+→ orchestration foundation, local reasoning, routing, policy, teams
+
+v0.8.x
+→ observability, run history, dashboard-ready logs
+
+v0.9.x
+→ local provider support, dashboard groundwork, production hardening
+
+v1.0
+→ stable open-source agent orchestration framework
+```
+
+---
+
+## Core Product Principle
+
+Orchgentic is not just an agent runner.
+
+It is the orchestration layer that decides:
+
+- What should handle the task
+- Whether tools are needed
+- Whether memory or knowledge should be used
+- Whether the task can stay local
+- Whether an LLM should be called
+- Whether policy allows execution
+- Whether human confirmation is required
+- Whether a team should collaborate
+- How the final answer should be synthesized
+- How the run should be inspected afterward
+
+The long-term goal is to help developers build agentic systems that are safer, more efficient, easier to debug, and easier to trust.
