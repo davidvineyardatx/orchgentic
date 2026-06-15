@@ -42,6 +42,13 @@ agent:
     - gmail.reply
     - gmail.delete
 
+  tool_runtime:
+    enabled: true
+    max_iterations: 4
+    timeout_seconds: 90
+    allow_parallel: false
+    save_results_to_memory: false
+
   gmail:
     connection: assistant
 
@@ -52,7 +59,7 @@ agent:
       send_policy:
         mode: restricted
         allowed_addresses:
-          - studio@example.com
+          - studio@davidvineyard.com
         allowed_domains: []
         require_confirmation: true
 
@@ -63,6 +70,11 @@ agent:
     gmail.delete:
       enabled: false
       require_confirmation: true
+
+  delegation:
+    enabled: false
+    allowed_agents: []
+    max_depth: 2
 
   routing:
     workflow:

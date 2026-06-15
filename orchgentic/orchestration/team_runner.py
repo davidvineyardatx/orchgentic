@@ -3,6 +3,7 @@ from orchgentic.agents.registry import AgentRegistry
 from orchgentic.orchestration.context import SharedContext
 from orchgentic.core.exceptions import TeamError
 from orchgentic.runtime.preflight import CapabilityPreflight
+import time
 from orchgentic.orchestration.synthesis_guardrails import (
     build_member_task,
     build_synthesis_task,
@@ -31,8 +32,11 @@ class TeamRunner:
                 configs.append(cfg)
         return configs
 
-    async def run_team(self, team_config, task: str | None = None, debug: bool = False, preflight: bool = True):
+    async def run_team(self, team_config, task: str | None = None, debug: bool = False, preflight: bool = True, tracer=None):
         team_task = task or team_config.task
+        team_started = time.perf_counter()
+        if tracer:
+            tracer.event("team.started", component="team", name=team_config.name, status="started", message="Team execution started.", data={"team": team_config.name, "orchestrator": team_config.orchestrator, "members": list(team_config.members)})
 
         agent_configs = self._load_team_agent_configs(team_config)
 
@@ -58,13 +62,19 @@ class TeamRunner:
             "Decide what each team member should contribute."
         )
 
+        member_started = time.perf_counter()
+        if tracer:
+            tracer.event("team.member.started", component="team", name=team_config.orchestrator, status="started", data={"role": "orchestrator"})
         orchestrator_output = await self.agent_manager.run_agent(
             team_config.orchestrator,
             orchestrator_prompt,
             debug=debug,
             metadata={"team": team_config.name, "role": "orchestrator"},
             preflight=False,
+            tracer=tracer,
         )
+        if tracer:
+            tracer.event("team.member.completed", component="team", name=team_config.orchestrator, status="completed", duration_ms=round((time.perf_counter() - member_started) * 1000, 2), data={"role": "orchestrator"})
         orchestrator_answer = extract_answer_for_handoff(orchestrator_output)
         shared.add_message(team_config.orchestrator, "team", orchestrator_answer)
         outputs.append({
@@ -79,13 +89,19 @@ class TeamRunner:
 
             member_task = build_member_task(team_task, shared.to_text(), member)
 
+            member_started = time.perf_counter()
+            if tracer:
+                tracer.event("team.member.started", component="team", name=member, status="started", data={"role": "member"})
             result = await self.agent_manager.run_agent(
                 member,
                 member_task,
                 debug=debug,
                 metadata={"team": team_config.name, "role": "member"},
                 preflight=False,
+                tracer=tracer,
             )
+            if tracer:
+                tracer.event("team.member.completed", component="team", name=member, status="completed", duration_ms=round((time.perf_counter() - member_started) * 1000, 2), data={"role": "member"})
             member_answer = extract_answer_for_handoff(result)
             shared.add_message(member, "team", member_answer)
             outputs.append({
@@ -95,17 +111,26 @@ class TeamRunner:
             })
 
         synthesis_task = build_synthesis_task(team_task, shared.to_text())
+        synthesis_started = time.perf_counter()
+        if tracer:
+            tracer.event("team.synthesis.started", component="team", name=team_config.orchestrator, status="started", data={"role": "synthesis"})
         final = await self.agent_manager.run_agent(
             team_config.orchestrator,
             synthesis_task,
             debug=debug,
             metadata={"team": team_config.name, "role": "synthesis", "memory_policy": "current_team_outputs_only"},
             preflight=False,
+            tracer=tracer,
         )
+        if tracer:
+            tracer.event("team.synthesis.completed", component="team", name=team_config.orchestrator, status="completed", duration_ms=round((time.perf_counter() - synthesis_started) * 1000, 2), data={"role": "synthesis"})
 
         final_answer = extract_answer_for_handoff(final)
         quality = sanitize_final_answer(final_answer)
         final = quality.answer
+
+        if tracer:
+            tracer.event("team.completed", component="team", name=team_config.name, status="completed", message="Team execution completed.", duration_ms=round((time.perf_counter() - team_started) * 1000, 2), data={"members": len(members), "outputs": len(outputs)})
 
         return {
             "team": team_config.name,

@@ -29,6 +29,8 @@ from orchgentic.tools.registry import default_tool_registry
 from orchgentic.teams.registry import TeamRegistry
 from orchgentic.orchestration.team_runner import TeamRunner
 from orchgentic.runtime.preflight import CapabilityPreflight
+from orchgentic.observability import ObservabilityStore, TraceCollector
+from orchgentic.observability.formatters import format_run_list, format_run_detail
 
 app = typer.Typer()
 connect_app = typer.Typer(help="Connect external accounts.")
@@ -90,7 +92,7 @@ def _parse_tool_args(arg_items):
 
 
 
-async def _try_deterministic_route(task, cfg, registry, debug=False):
+async def _try_deterministic_route(task, cfg, registry, debug=False, tracer=None):
     route_start = time.perf_counter()
     router = DeterministicRouter()
     decision = router.route(task, agent_config=cfg)
@@ -128,6 +130,52 @@ async def _try_deterministic_route(task, cfg, registry, debug=False):
         reasoning_level="local_tool",
     )
 
+    # Deterministic routes still execute inside an agent run when invoked through
+    # `orch run <agent>`. Validate the selected tool route before emitting
+    # agent-level events so fallback-to-LLM paths do not leave orphaned spans.
+    if getattr(decision, "route_type", "single_tool") == "multi_tool":
+        for step in decision.steps:
+            if not registry.get(step.tool):
+                return None
+    else:
+        if not registry.get(decision.tool):
+            return None
+
+    agent_started_at = time.perf_counter()
+
+    def _emit_agent_completed(status: str = "completed", message: str = "Agent deterministic route completed."):
+        if tracer:
+            tracer.event(
+                "agent.completed" if status == "completed" else "agent.failed",
+                component="agent",
+                name=getattr(cfg, "name", None),
+                status=status,
+                message=message,
+                duration_ms=round((time.perf_counter() - agent_started_at) * 1000, 2),
+                data={"deterministic_route": True, "selected_tool": selected_tool},
+            )
+
+    if tracer:
+        tracer.event(
+            "agent.started",
+            component="agent",
+            name=getattr(cfg, "name", None),
+            status="started",
+            message="Agent deterministic route started.",
+            data={"agent_id": getattr(cfg, "id", None), "deterministic_route": True},
+        )
+        tracer.event(
+            "routing.completed",
+            component="routing",
+            name=getattr(decision, "route_type", "single_tool"),
+            status="completed",
+            message=decision.reason,
+            duration_ms=telemetry.get("execution_time_ms"),
+            estimated_tokens_saved=token_estimate.total,
+            token_source="estimated",
+            data=telemetry,
+        )
+
     try:
         append_route_log("logs/routes.jsonl", telemetry)
         record_route_metric(telemetry)
@@ -153,7 +201,11 @@ async def _try_deterministic_route(task, cfg, registry, debug=False):
                     message_id = item.get("id")
                     if not message_id:
                         continue
+                    if tracer:
+                        tracer.event("tool.started", component="tool", name=step.tool, status="started", data={"arguments": {"message_id": message_id}})
                     result = await tool.execute(message_id=message_id)
+                    if tracer:
+                        tracer.event("tool.completed" if getattr(result, "success", False) else "tool.failed", component="tool", name=step.tool, status="completed" if getattr(result, "success", False) else "failed", message=getattr(result, "error", None), data={"arguments": {"message_id": message_id}, "success": getattr(result, "success", None)})
                     tool_events.append({
                         "tool": step.tool,
                         "arguments": {"message_id": message_id},
@@ -166,7 +218,11 @@ async def _try_deterministic_route(task, cfg, registry, debug=False):
                 final_data["messages"] = read_messages
                 continue
 
+            if tracer:
+                tracer.event("tool.started", component="tool", name=step.tool, status="started", data={"arguments": step.arguments})
             result = await tool.execute(**step.arguments)
+            if tracer:
+                tracer.event("tool.completed" if getattr(result, "success", False) else "tool.failed", component="tool", name=step.tool, status="completed" if getattr(result, "success", False) else "failed", message=getattr(result, "error", None), data={"arguments": step.arguments, "success": getattr(result, "success", None)})
             tool_events.append({
                 "tool": step.tool,
                 "arguments": step.arguments,
@@ -182,6 +238,7 @@ async def _try_deterministic_route(task, cfg, registry, debug=False):
                     typer.echo("TOOLS")
                     typer.echo(tool_events)
                     typer.echo("")
+                _emit_agent_completed(status="failed", message=getattr(result, "error", None) or "Deterministic route tool failed.")
                 return result
 
             context[step.result_key or step.tool] = getattr(result, "data", {})
@@ -200,13 +257,18 @@ async def _try_deterministic_route(task, cfg, registry, debug=False):
             error = None
             data = formatter.format(decision.formatter, final_data)
 
+        _emit_agent_completed()
         return FormattedResult()
 
     tool = registry.get(decision.tool)
     if not tool:
         return None
 
+    if tracer:
+        tracer.event("tool.started", component="tool", name=decision.tool, status="started", data={"arguments": decision.arguments})
     result = await tool.execute(**decision.arguments)
+    if tracer:
+        tracer.event("tool.completed" if getattr(result, "success", False) else "tool.failed", component="tool", name=decision.tool, status="completed" if getattr(result, "success", False) else "failed", message=getattr(result, "error", None), data={"arguments": decision.arguments, "success": getattr(result, "success", None)})
     tool_events.append({
         "tool": decision.tool,
         "arguments": decision.arguments,
@@ -227,8 +289,10 @@ async def _try_deterministic_route(task, cfg, registry, debug=False):
             success = True
             error = None
             data = formatter.format(decision.formatter, result)
+        _emit_agent_completed()
         return FormattedResult()
 
+    _emit_agent_completed(status="failed", message=getattr(result, "error", None) or "Deterministic route tool failed.")
     return result
 
 
@@ -325,6 +389,37 @@ def route_metrics():
     metrics = load_metrics()
     typer.echo(metrics.summary())
 
+
+
+@app.command("runs")
+def runs(
+    limit: int = typer.Option(20, "--limit", help="Number of recent runs to show."),
+    status: str = typer.Option(None, "--status", help="Optional status filter, such as completed, failed, blocked, or hold_for_confirmation."),
+    run_type: str = typer.Option(None, "--type", help="Optional run type filter, such as agent, team, or tool."),
+):
+    """List recent Orchgentic runs from the observability store."""
+    store = ObservabilityStore()
+    typer.echo(format_run_list(store.list_runs(limit=limit, status=status, run_type=run_type)))
+
+
+@app.command("run-info")
+def run_info(run_id: str):
+    """Show one run and its trace events."""
+    store = ObservabilityStore()
+    run = store.get_run(run_id)
+    if run is None:
+        matches = [item for item in store.list_runs(limit=500) if item.run_id.startswith(run_id)]
+        if len(matches) == 1:
+            run = matches[0]
+        elif len(matches) > 1:
+            typer.echo(f"Run prefix is ambiguous: {run_id}")
+            for item in matches[:20]:
+                typer.echo(f"- {item.run_id} {item.status} {item.run_type} {item.task}")
+            raise typer.Exit(1)
+    if run is None:
+        typer.echo(f"Run not found: {run_id}")
+        raise typer.Exit(1)
+    typer.echo(format_run_detail(run, store.list_events(run.run_id)))
 
 @app.command("list-agents")
 def list_agents():
@@ -434,11 +529,18 @@ def run_team(
             typer.echo(f"Team not found: {team_name}")
             raise typer.Exit(1)
         task = typer.prompt("Team task", default=team.task)
+        tracer = TraceCollector()
+        tracer.start_run(run_type="team", task=task, team_id=getattr(team, "id", None), team_name=team.name, metadata={"source": "cli", "debug": debug})
         try:
-            result = await TeamRunner().run_team(team, task=task, debug=debug, preflight=not no_preflight)
+            result = await TeamRunner().run_team(team, task=task, debug=debug, preflight=not no_preflight, tracer=tracer)
+            tracer.complete_run(status="completed", message="Team run completed.")
         except RuntimeError as exc:
+            tracer.fail_run(exc)
             typer.echo(str(exc))
             raise typer.Exit(1)
+        except Exception as exc:
+            tracer.fail_run(exc)
+            raise
 
         typer.echo("TEAM FINAL")
         typer.echo(result["final"])
@@ -505,22 +607,53 @@ def run(
         knowledge = KnowledgeManager(provider, cfg.knowledge.store, cfg.knowledge.db_path, cfg.knowledge.collection)
         registry = default_tool_registry(memory, knowledge, source_agent_config=cfg)
 
-        deterministic_result = await _try_deterministic_route(task, cfg, registry, debug=debug)
-        if deterministic_result is not None:
-            typer.echo("ANSWER")
-            if getattr(deterministic_result, "data", None) is not None:
-                typer.echo(deterministic_result.data)
-            elif getattr(deterministic_result, "error", None):
-                typer.echo(deterministic_result.error)
-            else:
-                typer.echo(deterministic_result)
-            return
+        tracer = TraceCollector()
+        tracer.start_run(
+            run_type="agent",
+            task=task,
+            agent_id=cfg.id,
+            agent_name=cfg.name,
+            provider=getattr(cfg.provider, "type", None),
+            model=getattr(cfg.provider, "model", None),
+            metadata={"source": "cli", "debug": debug},
+        )
+
+        try:
+            deterministic_result = await _try_deterministic_route(task, cfg, registry, debug=debug, tracer=tracer)
+            if deterministic_result is not None:
+                if getattr(deterministic_result, "success", True):
+                    tracer.complete_run(status="completed", message="Deterministic local route completed.")
+                else:
+                    tracer.complete_run(status="failed", message=getattr(deterministic_result, "error", "Deterministic route failed."))
+                typer.echo("ANSWER")
+                if getattr(deterministic_result, "data", None) is not None:
+                    typer.echo(deterministic_result.data)
+                elif getattr(deterministic_result, "error", None):
+                    typer.echo(deterministic_result.error)
+                else:
+                    typer.echo(deterministic_result)
+                return
+        except Exception as exc:
+            tracer.fail_run(exc)
+            raise
 
         judgment = evaluate_orchestration_judgment(
             task,
             cfg=cfg,
             registry=registry,
             event_context={"event_type": "manual", "source": "cli"},
+        )
+
+        tracer.event("routing.completed", component="routing", name="orchestration_judgment", status="completed", data=judgment)
+        policy_decision = judgment.get("policy", {}) or {}
+        policy_action = policy_decision.get("action", "unknown")
+        tracer.event(
+            "policy.checked",
+            component="policy",
+            name=policy_action,
+            status=policy_action if policy_action in {"allow", "block", "hold_for_confirmation"} else "completed",
+            message=policy_decision.get("reason"),
+            data=policy_decision,
         )
 
         if debug:
@@ -530,17 +663,26 @@ def run(
 
         final_decision = judgment.get("final_decision", {}) or {}
         if final_decision.get("action") in {"block", "hold_for_confirmation"}:
+            action = final_decision.get("action")
+            tracer.complete_run(status=action, message=final_decision.get("reason") or "Routing stopped by policy.")
             typer.echo("ANSWER")
             typer.echo(final_decision.get("reason") or "Routing stopped by policy.")
             return
 
         agent = AssistantAgent(cfg, provider)
-        typer.echo(await agent.run(
-            task,
-            debug=debug,
-            show_plan=show_plan,
-            reflection=not no_reflection
-        ))
+        try:
+            output = await agent.run(
+                task,
+                debug=debug,
+                show_plan=show_plan,
+                reflection=not no_reflection,
+                tracer=tracer,
+            )
+            tracer.complete_run(status="completed", message="Agent run completed.")
+            typer.echo(output)
+        except Exception as exc:
+            tracer.fail_run(exc)
+            raise
 
     asyncio.run(_run())
 
@@ -606,7 +748,16 @@ def tool_run(
             typer.echo(str(exc))
             raise typer.Exit(1)
 
-        result = await tool.execute(**parsed_args)
+        tracer = TraceCollector()
+        tracer.start_run(run_type="tool", task=f"{tool_name} {parsed_args}", agent_id=cfg.id, agent_name=cfg.name, provider=getattr(cfg.provider, "type", None), model=getattr(cfg.provider, "model", None), metadata={"source": "cli", "tool": tool_name})
+        try:
+            tracer.event("tool.started", component="tool", name=tool_name, status="started", data={"arguments": parsed_args})
+            result = await tool.execute(**parsed_args)
+            tracer.event("tool.completed" if getattr(result, "success", False) else "tool.failed", component="tool", name=tool_name, status="completed" if getattr(result, "success", False) else "failed", message=getattr(result, "error", None), data={"success": getattr(result, "success", None), "arguments": parsed_args})
+            tracer.complete_run(status="completed" if getattr(result, "success", False) else "failed", message=getattr(result, "error", None))
+        except Exception as exc:
+            tracer.fail_run(exc)
+            raise
         typer.echo(result)
 
     asyncio.run(_run())

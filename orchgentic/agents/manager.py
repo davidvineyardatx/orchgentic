@@ -25,7 +25,7 @@ class AgentManager:
         provider = create_provider(cfg.provider)
         return AssistantAgent(cfg, provider)
 
-    async def run_agent(self, name: str, task: str, *, debug: bool = False, metadata: dict | None = None, preflight: bool = True):
+    async def run_agent(self, name: str, task: str, *, debug: bool = False, metadata: dict | None = None, preflight: bool = True, tracer=None):
         cfg = self.load_agent_config(name)
 
         if preflight:
@@ -33,4 +33,4 @@ class AgentManager:
             self.preflight.raise_or_notify(issues, context={"agent": cfg.name, "task": task})
 
         agent = self.create_agent(name)
-        return await agent.run(task, debug=debug, metadata=metadata)
+        return await agent.run(task, debug=debug, metadata=metadata, tracer=tracer)

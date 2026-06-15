@@ -2,13 +2,16 @@ import asyncio
 import json
 from orchgentic.core.exceptions import ToolError, PermissionError
 from orchgentic.tools.schemas import ToolCall, ToolResult
+from orchgentic.runtime.token_estimator import estimate_tokens
+import time
 
 class ToolRuntime:
-    def __init__(self, registry, allowed_tools=None, max_iterations: int = 4, timeout_seconds: int = 90):
+    def __init__(self, registry, allowed_tools=None, max_iterations: int = 4, timeout_seconds: int = 90, tracer=None):
         self.registry = registry
         self.allowed_tools = [tool.lower() for tool in (allowed_tools or [])]
         self.max_iterations = max_iterations
         self.timeout_seconds = timeout_seconds
+        self.tracer = tracer
 
     def available_definitions(self):
         return self.registry.definitions(self.allowed_tools or None)
@@ -114,12 +117,40 @@ class ToolRuntime:
             return await provider.generate(messages), observations
 
         for iteration in range(self.max_iterations):
+            llm_started = time.perf_counter()
+            if self.tracer:
+                self.tracer.event("llm.started", component="provider", name="tool_decision", status="started", data={"iteration": iteration + 1})
             decision_text = await provider.generate_tool_decision(messages, tools, self.max_iterations)
+            if self.tracer:
+                self.tracer.event(
+                    "llm.completed",
+                    component="provider",
+                    name="tool_decision",
+                    status="completed",
+                    duration_ms=round((time.perf_counter() - llm_started) * 1000, 2),
+                    input_tokens=estimate_tokens(messages) + estimate_tokens(tools),
+                    output_tokens=estimate_tokens(decision_text),
+                    token_source="estimated",
+                    data={"iteration": iteration + 1},
+                )
             decision = self.parse_decision(decision_text)
 
             if decision.get("action") == "tool":
                 call = ToolCall(decision.get("tool"), decision.get("arguments", {}) or {})
+                tool_started = time.perf_counter()
+                if self.tracer:
+                    self.tracer.event("tool.started", component="tool", name=call.tool_name, status="started", data={"iteration": iteration + 1, "arguments": call.arguments})
                 result = await self.execute_tool_call(call)
+                if self.tracer:
+                    self.tracer.event(
+                        "tool.completed" if result.success else "tool.failed",
+                        component="tool",
+                        name=call.tool_name,
+                        status="completed" if result.success else "failed",
+                        duration_ms=round((time.perf_counter() - tool_started) * 1000, 2),
+                        message=result.error,
+                        data={"iteration": iteration + 1, "arguments": call.arguments, "success": result.success},
+                    )
 
                 observation = {
                     "iteration": iteration + 1,
@@ -154,10 +185,25 @@ class ToolRuntime:
 
             return decision_text, observations
 
-        final_answer = await provider.generate(messages + [{
+        final_messages = messages + [{
             "role": "user",
             "content": "Tool iteration limit reached. Provide the best final answer using the available observations. Do not call another tool."
-        }])
+        }]
+        llm_started = time.perf_counter()
+        if self.tracer:
+            self.tracer.event("llm.started", component="provider", name="final_after_tool_limit", status="started")
+        final_answer = await provider.generate(final_messages)
+        if self.tracer:
+            self.tracer.event(
+                "llm.completed",
+                component="provider",
+                name="final_after_tool_limit",
+                status="completed",
+                duration_ms=round((time.perf_counter() - llm_started) * 1000, 2),
+                input_tokens=estimate_tokens(final_messages),
+                output_tokens=estimate_tokens(final_answer),
+                token_source="estimated",
+            )
         final_decision = self.parse_decision(final_answer)
         if final_decision.get("action") == "final" and final_decision.get("answer"):
             return final_decision["answer"], observations
