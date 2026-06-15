@@ -30,7 +30,15 @@ from orchgentic.teams.registry import TeamRegistry
 from orchgentic.orchestration.team_runner import TeamRunner
 from orchgentic.runtime.preflight import CapabilityPreflight
 from orchgentic.observability import ObservabilityStore, TraceCollector
-from orchgentic.observability.formatters import format_run_list, format_run_detail
+from orchgentic.observability.formatters import (
+    format_run_list,
+    format_run_detail,
+    format_run_summary,
+    format_event_list,
+    format_run_json,
+    format_runs_json,
+    format_events_json,
+)
 
 app = typer.Typer()
 connect_app = typer.Typer(help="Connect external accounts.")
@@ -391,35 +399,80 @@ def route_metrics():
 
 
 
+def _resolve_run(store: ObservabilityStore, run_id: str):
+    run = store.get_run(run_id)
+    if run is not None:
+        return run
+    matches = [item for item in store.list_runs(limit=500) if item.run_id.startswith(run_id)]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        typer.echo(f"Run prefix is ambiguous: {run_id}")
+        for item in matches[:20]:
+            typer.echo(f"- {item.run_id} {item.status} {item.run_type} {item.task}")
+        raise typer.Exit(1)
+    typer.echo(f"Run not found: {run_id}")
+    raise typer.Exit(1)
+
+
 @app.command("runs")
 def runs(
     limit: int = typer.Option(20, "--limit", help="Number of recent runs to show."),
     status: str = typer.Option(None, "--status", help="Optional status filter, such as completed, failed, blocked, or hold_for_confirmation."),
     run_type: str = typer.Option(None, "--type", help="Optional run type filter, such as agent, team, or tool."),
+    agent: str = typer.Option(None, "--agent", help="Optional agent name or id filter."),
+    team: str = typer.Option(None, "--team", help="Optional team name or id filter."),
+    json_output: bool = typer.Option(False, "--json", help="Output run list as JSON."),
 ):
     """List recent Orchgentic runs from the observability store."""
     store = ObservabilityStore()
-    typer.echo(format_run_list(store.list_runs(limit=limit, status=status, run_type=run_type)))
+    items = store.list_runs(limit=limit, status=status, run_type=run_type, agent=agent, team=team)
+    typer.echo(format_runs_json(items) if json_output else format_run_list(items))
 
 
 @app.command("run-info")
-def run_info(run_id: str):
+def run_info(
+    run_id: str,
+    json_output: bool = typer.Option(False, "--json", help="Output run and events as JSON."),
+    events_only: bool = typer.Option(False, "--events-only", help="Show trace events only."),
+    summary_only: bool = typer.Option(False, "--summary-only", help="Show run summary only."),
+):
     """Show one run and its trace events."""
-    store = ObservabilityStore()
-    run = store.get_run(run_id)
-    if run is None:
-        matches = [item for item in store.list_runs(limit=500) if item.run_id.startswith(run_id)]
-        if len(matches) == 1:
-            run = matches[0]
-        elif len(matches) > 1:
-            typer.echo(f"Run prefix is ambiguous: {run_id}")
-            for item in matches[:20]:
-                typer.echo(f"- {item.run_id} {item.status} {item.run_type} {item.task}")
-            raise typer.Exit(1)
-    if run is None:
-        typer.echo(f"Run not found: {run_id}")
+    if events_only and summary_only:
+        typer.echo("Use either --events-only or --summary-only, not both.")
         raise typer.Exit(1)
-    typer.echo(format_run_detail(run, store.list_events(run.run_id)))
+    store = ObservabilityStore()
+    run = _resolve_run(store, run_id)
+    events = store.list_events(run.run_id)
+    if json_output:
+        if events_only:
+            typer.echo(format_events_json(events))
+        elif summary_only:
+            typer.echo(format_run_json(run))
+        else:
+            typer.echo(format_run_json(run, events))
+        return
+    if events_only:
+        typer.echo(format_event_list(events))
+    elif summary_only:
+        typer.echo(format_run_summary(run))
+    else:
+        typer.echo(format_run_detail(run, events))
+
+
+@app.command("trace")
+def trace(
+    run_id: str,
+    json_output: bool = typer.Option(False, "--json", help="Output trace events as JSON."),
+    event_type: str = typer.Option(None, "--type", help="Optional event type filter, such as tool.completed."),
+    component: str = typer.Option(None, "--component", help="Optional component filter, such as tool, policy, routing, provider, agent, team."),
+    tokens: bool = typer.Option(False, "--tokens", help="Only show events with token usage or estimated token savings."),
+):
+    """Show trace events for one run."""
+    store = ObservabilityStore()
+    run = _resolve_run(store, run_id)
+    events = store.list_events(run.run_id, event_type=event_type, component=component, tokens_only=tokens)
+    typer.echo(format_events_json(events) if json_output else format_event_list(events))
 
 @app.command("list-agents")
 def list_agents():

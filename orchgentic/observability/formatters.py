@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from .models import RunRecord, TraceEvent
 
 
@@ -23,6 +24,25 @@ def _token_summary(run: RunRecord | TraceEvent) -> str:
     return ", ".join(parts) if parts else "tokens=n/a"
 
 
+def run_to_dict(run: RunRecord, events: list[TraceEvent] | None = None) -> dict:
+    data = run.to_dict()
+    if events is not None:
+        data["events"] = [event.to_dict() for event in events]
+    return data
+
+
+def format_run_json(run: RunRecord, events: list[TraceEvent] | None = None) -> str:
+    return json.dumps(run_to_dict(run, events), indent=2, sort_keys=True, default=str)
+
+
+def format_runs_json(runs: list[RunRecord]) -> str:
+    return json.dumps([run.to_dict() for run in runs], indent=2, sort_keys=True, default=str)
+
+
+def format_events_json(events: list[TraceEvent]) -> str:
+    return json.dumps([event.to_dict() for event in events], indent=2, sort_keys=True, default=str)
+
+
 def format_run_list(runs: list[RunRecord]) -> str:
     if not runs:
         return "No runs found."
@@ -40,7 +60,7 @@ def format_run_list(runs: list[RunRecord]) -> str:
     return "\n".join(lines)
 
 
-def format_run_detail(run: RunRecord, events: list[TraceEvent]) -> str:
+def format_run_summary(run: RunRecord) -> str:
     lines = ["RUN"]
     lines.append(f"id: {run.run_id}")
     lines.append(f"type: {run.run_type}")
@@ -65,8 +85,11 @@ def format_run_detail(run: RunRecord, events: list[TraceEvent]) -> str:
     if run.error_message:
         lines.append(f"error: {run.error_type}: {run.error_message}")
     lines.append(f"task: {run.task}")
-    lines.append("")
-    lines.append("TRACE EVENTS")
+    return "\n".join(lines)
+
+
+def format_event_list(events: list[TraceEvent], *, title: str = "TRACE EVENTS") -> str:
+    lines = [title]
     if not events:
         lines.append("No trace events found.")
         return "\n".join(lines)
@@ -80,3 +103,7 @@ def format_run_detail(run: RunRecord, events: list[TraceEvent]) -> str:
             f"({event.component}{name}) status={event.status}{duration} {token_info}{msg}"
         )
     return "\n".join(lines)
+
+
+def format_run_detail(run: RunRecord, events: list[TraceEvent]) -> str:
+    return format_run_summary(run) + "\n\n" + format_event_list(events)

@@ -113,7 +113,14 @@ class ObservabilityStore:
             )
         return event
 
-    def list_runs(self, limit: int = 20, status: str | None = None, run_type: str | None = None) -> list[RunRecord]:
+    def list_runs(
+        self,
+        limit: int = 20,
+        status: str | None = None,
+        run_type: str | None = None,
+        agent: str | None = None,
+        team: str | None = None,
+    ) -> list[RunRecord]:
         limit = max(1, min(int(limit or 20), 500))
         where = []
         params: list[object] = []
@@ -123,6 +130,12 @@ class ObservabilityStore:
         if run_type:
             where.append("run_type = ?")
             params.append(run_type)
+        if agent:
+            where.append("(lower(agent_id) = lower(?) OR lower(agent_name) = lower(?))")
+            params.extend([agent, agent])
+        if team:
+            where.append("(lower(team_id) = lower(?) OR lower(team_name) = lower(?))")
+            params.extend([team, team])
         sql = "SELECT * FROM runs"
         if where:
             sql += " WHERE " + " AND ".join(where)
@@ -137,12 +150,26 @@ class ObservabilityStore:
             row = conn.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)).fetchone()
         return RunRecord.from_row(row) if row else None
 
-    def list_events(self, run_id: str) -> list[TraceEvent]:
+    def list_events(
+        self,
+        run_id: str,
+        event_type: str | None = None,
+        component: str | None = None,
+        tokens_only: bool = False,
+    ) -> list[TraceEvent]:
+        where = ["run_id = ?"]
+        params: list[object] = [run_id]
+        if event_type:
+            where.append("event_type = ?")
+            params.append(event_type)
+        if component:
+            where.append("component = ?")
+            params.append(component)
+        if tokens_only:
+            where.append("(total_tokens > 0 OR estimated_tokens_saved > 0)")
+        sql = "SELECT * FROM trace_events WHERE " + " AND ".join(where) + " ORDER BY timestamp ASC"
         with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT * FROM trace_events WHERE run_id = ? ORDER BY timestamp ASC",
-                (run_id,),
-            ).fetchall()
+            rows = conn.execute(sql, params).fetchall()
         return [TraceEvent.from_row(row) for row in rows]
 
     def add_events(self, events: Iterable[TraceEvent]) -> list[TraceEvent]:
