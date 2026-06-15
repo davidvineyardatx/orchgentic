@@ -6,8 +6,10 @@ from orchgentic.runtime.deterministic_formatter import DeterministicFormatter
 from orchgentic.runtime.deterministic_router import DeterministicRouter
 from orchgentic.runtime.cost_tracker import build_route_telemetry, append_route_log
 import asyncio
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import json
+import re
 import typer
 import uvicorn
 from orchgentic.connectors.gmail.oauth import connect_gmail
@@ -103,6 +105,63 @@ def _parse_tool_args(arg_items):
                     parsed[key] = value
     return parsed
 
+
+
+def _parse_retention_window(value: str | None) -> str | None:
+    """Convert a simple retention window like 30d, 12h, or 2w to a UTC ISO cutoff."""
+    if not value:
+        return None
+    raw = value.strip().lower()
+    match = re.match(r"^(\d+)([dhw])$", raw)
+    if not match:
+        raise typer.BadParameter("Expected --older-than in the form 30d, 12h, or 2w.")
+    amount = int(match.group(1))
+    unit = match.group(2)
+    if amount <= 0:
+        raise typer.BadParameter("--older-than must be greater than zero.")
+    if unit == "h":
+        delta = timedelta(hours=amount)
+    elif unit == "d":
+        delta = timedelta(days=amount)
+    elif unit == "w":
+        delta = timedelta(weeks=amount)
+    else:
+        raise typer.BadParameter("Unsupported retention unit.")
+    return (datetime.now(timezone.utc) - delta).isoformat()
+
+
+def _format_stats(stats: dict) -> str:
+    lines = ["RUN STATS"]
+    filters = {k: v for k, v in (stats.get("filters") or {}).items() if v}
+    if filters:
+        lines.append("filters: " + ", ".join(f"{k}={v}" for k, v in filters.items()))
+    lines.append(f"total_runs: {stats.get('total_runs', 0)}")
+    lines.append(f"external_llm_runs: {stats.get('external_llm_runs', 0)}")
+    lines.append(f"total_tokens: {stats.get('total_tokens', 0)}")
+    lines.append(f"input_tokens: {stats.get('input_tokens', 0)}")
+    lines.append(f"output_tokens: {stats.get('output_tokens', 0)}")
+    lines.append(f"estimated_tokens_saved: {stats.get('estimated_tokens_saved', 0)}")
+    lines.append(f"avg_duration_ms: {stats.get('avg_duration_ms', 0)}")
+    if stats.get("first_run_at"):
+        lines.append(f"first_run_at: {stats.get('first_run_at')}")
+    if stats.get("last_run_at"):
+        lines.append(f"last_run_at: {stats.get('last_run_at')}")
+
+    by_status = stats.get("by_status") or {}
+    if by_status:
+        lines.append("")
+        lines.append("by_status:")
+        for key, value in by_status.items():
+            lines.append(f"  {key}: {value}")
+
+    by_type = stats.get("by_type") or {}
+    if by_type:
+        lines.append("")
+        lines.append("by_type:")
+        for key, value in by_type.items():
+            lines.append(f"  {key}: {value}")
+
+    return "\n".join(lines)
 
 
 
@@ -421,6 +480,81 @@ def _resolve_run(store: ObservabilityStore, run_id: str):
     raise typer.Exit(1)
 
 
+def _failure_target(run) -> str:
+    return run.team_name or run.agent_name or run.team_id or run.agent_id or "-"
+
+
+def _failure_summary_from_events(run, events) -> tuple[str, str, str | None, str | None]:
+    failed_events = [
+        event for event in events
+        if event.status == "failed" or event.event_type.endswith(".failed")
+    ]
+    last_failed = failed_events[-1] if failed_events else None
+    error_type = run.error_type or (last_failed.event_type if last_failed else "unknown")
+    error_message = run.error_message or (last_failed.message if last_failed else None)
+    failed_event_type = last_failed.event_type if last_failed else None
+    failed_component = last_failed.component if last_failed else None
+    summary = error_message or "Run failed. Inspect trace events for details."
+    summary = str(summary).replace("\n", " ").strip()
+    if len(summary) > 100:
+        summary = summary[:97] + "..."
+    return error_type, summary, failed_event_type, failed_component
+
+
+def _failure_items(store: ObservabilityStore, runs) -> list[dict]:
+    items = []
+    for run in runs:
+        events = store.list_events(run.run_id)
+        error_type, summary, failed_event_type, failed_component = _failure_summary_from_events(run, events)
+        items.append({
+            "run_id": run.run_id,
+            "short_run_id": run.run_id[:8],
+            "run_type": run.run_type,
+            "status": run.status,
+            "target": _failure_target(run),
+            "agent_id": run.agent_id,
+            "agent_name": run.agent_name,
+            "team_id": run.team_id,
+            "team_name": run.team_name,
+            "started_at": run.started_at,
+            "duration_ms": run.duration_ms,
+            "error_type": error_type,
+            "summary": summary,
+            "failed_event_type": failed_event_type,
+            "failed_component": failed_component,
+            "task": run.task,
+        })
+    return items
+
+
+def _format_failures(items: list[dict], *, group_by: str | None = None) -> str:
+    if not items:
+        return "No failures found."
+
+    if group_by == "error_type":
+        grouped: dict[str, list[dict]] = {}
+        for item in items:
+            grouped.setdefault(item["error_type"] or "unknown", []).append(item)
+
+        lines = ["FAILURES BY ERROR TYPE"]
+        for error_type, group in sorted(grouped.items(), key=lambda pair: len(pair[1]), reverse=True):
+            lines.append("")
+            lines.append(f"{error_type}: {len(group)}")
+            for item in group:
+                lines.append(
+                    f"  - {item['short_run_id']} {item['run_type']} {item['target']} - {item['summary']}"
+                )
+        return "\n".join(lines)
+
+    lines = ["FAILURES"]
+    for item in items:
+        lines.append(
+            f"{item['short_run_id']}  {item['run_type']:<8} {item['target']:<18} "
+            f"{item['error_type']:<24} {item['summary']}"
+        )
+    return "\n".join(lines)
+
+
 @app.command("runs")
 def runs(
     limit: int = typer.Option(20, "--limit", help="Number of recent runs to show."),
@@ -515,6 +649,107 @@ def export_runs(
         typer.echo(f"Exported run history to {output}")
     else:
         typer.echo(text)
+
+
+
+@app.command("failures")
+def failures(
+    limit: int = typer.Option(20, "--limit", help="Number of failed runs to show."),
+    run_type: str = typer.Option(None, "--type", help="Optional run type filter, such as agent, team, or tool."),
+    agent: str = typer.Option(None, "--agent", help="Optional agent name or id filter."),
+    team: str = typer.Option(None, "--team", help="Optional team name or id filter."),
+    group_by: str = typer.Option(None, "--group-by", help="Optional grouping. Supported: error_type."),
+    json_output: bool = typer.Option(False, "--json", help="Output failures as JSON."),
+):
+    """Show failed runs with concise diagnostics."""
+    if group_by and group_by != "error_type":
+        typer.echo("Unsupported --group-by value. Supported: error_type.")
+        raise typer.Exit(1)
+
+    store = ObservabilityStore()
+    runs = store.list_failures(limit=limit, run_type=run_type, agent=agent, team=team)
+    items = _failure_items(store, runs)
+
+    if json_output:
+        payload = {
+            "failures": items,
+            "stats": store.get_failure_stats(run_type=run_type, agent=agent, team=team),
+        }
+        typer.echo(json.dumps(payload, indent=2, sort_keys=True, default=str))
+        return
+
+    typer.echo(_format_failures(items, group_by=group_by))
+
+@app.command("runs-stats")
+def runs_stats(
+    status: str = typer.Option(None, "--status", help="Optional status filter."),
+    run_type: str = typer.Option(None, "--type", help="Optional run type filter, such as agent, team, or tool."),
+    agent: str = typer.Option(None, "--agent", help="Optional agent name or id filter."),
+    team: str = typer.Option(None, "--team", help="Optional team name or id filter."),
+    json_output: bool = typer.Option(False, "--json", help="Output stats as JSON."),
+):
+    """Show observability run statistics."""
+    store = ObservabilityStore()
+    stats = store.get_stats(status=status, run_type=run_type, agent=agent, team=team)
+    typer.echo(json.dumps(stats, indent=2, sort_keys=True, default=str) if json_output else _format_stats(stats))
+
+
+@app.command("runs-prune")
+def runs_prune(
+    older_than: str = typer.Option(None, "--older-than", help="Only match runs older than this window, such as 30d, 12h, or 2w."),
+    status: str = typer.Option(None, "--status", help="Optional status filter."),
+    run_type: str = typer.Option(None, "--type", help="Optional run type filter, such as agent, team, or tool."),
+    agent: str = typer.Option(None, "--agent", help="Optional agent name or id filter."),
+    team: str = typer.Option(None, "--team", help="Optional team name or id filter."),
+    limit: int = typer.Option(None, "--limit", help="Optional maximum number of matching runs to delete."),
+    dry_run: bool = typer.Option(True, "--dry-run/--no-dry-run", help="Preview matching runs without deleting. Enabled by default."),
+    confirm: bool = typer.Option(False, "--confirm", help="Required to actually delete runs."),
+):
+    """Prune old or filtered observability run records safely."""
+    cutoff = _parse_retention_window(older_than)
+    store = ObservabilityStore()
+
+    if not dry_run and not confirm:
+        typer.echo("Refusing to delete runs without --confirm. Use --dry-run first, then --no-dry-run --confirm.")
+        raise typer.Exit(1)
+
+    result = store.prune_runs(
+        status=status,
+        run_type=run_type,
+        agent=agent,
+        team=team,
+        older_than_iso=cutoff,
+        limit=limit,
+        dry_run=dry_run,
+    )
+
+    mode = "DRY RUN" if dry_run else "PRUNE"
+    typer.echo(f"{mode}: matched {result['matched']} run(s), deleted {result['deleted']} run(s).")
+    if result["run_ids"]:
+        typer.echo("run_ids:")
+        for run_id in result["run_ids"][:50]:
+            typer.echo(f"- {run_id}")
+        if len(result["run_ids"]) > 50:
+            typer.echo(f"... {len(result['run_ids']) - 50} more")
+
+
+@app.command("run-delete")
+def run_delete(
+    run_id: str,
+    confirm: bool = typer.Option(False, "--confirm", help="Required to delete the run and its trace events."),
+):
+    """Delete one observability run and its trace events."""
+    if not confirm:
+        typer.echo("Refusing to delete run without --confirm.")
+        raise typer.Exit(1)
+    store = ObservabilityStore()
+    run = _resolve_run(store, run_id)
+    deleted = store.delete_run(run.run_id)
+    if deleted:
+        typer.echo(f"Deleted run {run.run_id}.")
+    else:
+        typer.echo(f"Run not found: {run_id}")
+        raise typer.Exit(1)
 
 @app.command("list-agents")
 def list_agents():

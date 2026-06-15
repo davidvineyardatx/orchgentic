@@ -282,3 +282,68 @@ def test_observability_export_writer_creates_parent_directories(tmp_path):
     write_export_text("{}", output)
     assert output.exists()
     assert output.read_text(encoding="utf-8") == "{}"
+
+
+def test_observability_store_stats_and_delete_run(tmp_path):
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+
+    run = tracer.start_run(run_type="tool", task="datetime.local {}", agent_id="bob", agent_name="Bob")
+    tracer.event("routing.bypassed", component="routing", name="direct_tool", estimated_tokens_saved=349, token_source="estimated")
+    tracer.complete_run()
+
+    stats = store.get_stats()
+    assert stats["total_runs"] == 1
+    assert stats["estimated_tokens_saved"] == 349
+    assert stats["by_type"]["tool"] == 1
+    assert stats["by_status"]["completed"] == 1
+
+    assert store.delete_run(run.run_id) is True
+    assert store.get_run(run.run_id) is None
+    assert store.list_events(run.run_id) == []
+
+
+def test_observability_store_prune_runs_dry_run_and_confirm(tmp_path):
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+
+    run1 = tracer.start_run(run_type="tool", task="old failed tool", agent_id="bob")
+    run1.started_at = "2020-01-01T00:00:00+00:00"
+    run1.status = "failed"
+    store.update_run(run1)
+    tracer.complete_run(status="failed", message="failed")
+
+    tracer2 = TraceCollector(store=store)
+    run2 = tracer2.start_run(run_type="agent", task="recent agent", agent_id="bob")
+    tracer2.complete_run()
+
+    dry = store.prune_runs(status="failed", older_than_iso="2021-01-01T00:00:00+00:00", dry_run=True)
+    assert dry["matched"] == 1
+    assert dry["deleted"] == 0
+    assert store.get_run(run1.run_id) is not None
+
+    confirmed = store.prune_runs(status="failed", older_than_iso="2021-01-01T00:00:00+00:00", dry_run=False)
+    assert confirmed["matched"] == 1
+    assert confirmed["deleted"] == 1
+    assert store.get_run(run1.run_id) is None
+    assert store.get_run(run2.run_id) is not None
+
+
+def test_observability_store_lists_failures_and_failure_stats(tmp_path):
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+
+    run = tracer.start_run(run_type="tool", task="gmail.send", agent_id="bob", agent_name="Bob")
+    tracer.event("tool.failed", component="tool", name="gmail.send", status="failed", message="Missing confirmation")
+    tracer.run.error_type = "ToolExecutionError"
+    tracer.run.error_message = "gmail.send failed: Missing confirmation"
+    tracer.complete_run(status="failed", message="gmail.send failed")
+
+    failures = store.list_failures()
+    assert len(failures) == 1
+    assert failures[0].run_id == run.run_id
+
+    stats = store.get_failure_stats()
+    assert stats["total_failures"] == 1
+    assert stats["by_error_type"]["ToolExecutionError"] == 1
+    assert stats["by_type"]["tool"] == 1
