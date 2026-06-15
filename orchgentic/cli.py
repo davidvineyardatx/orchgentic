@@ -12,6 +12,7 @@ import json
 import re
 import typer
 import uvicorn
+import webbrowser
 from orchgentic.connectors.gmail.oauth import connect_gmail
 from orchgentic.connectors.gmail.storage import list_connections, read_account, delete_connection
 from orchgentic.scaffold import create_agent_file, create_team_file, create_trigger_file
@@ -46,6 +47,11 @@ from orchgentic.observability.exporters import (
     export_run_detail,
     export_runs_jsonl,
     write_export_text,
+)
+from orchgentic.observability.dashboard import (
+    DEFAULT_DASHBOARD_PATH,
+    build_dashboard_html,
+    write_dashboard_html,
 )
 
 app = typer.Typer()
@@ -651,6 +657,32 @@ def export_runs(
         typer.echo(text)
 
 
+
+
+@app.command("dashboard")
+def dashboard(
+    output: Path = typer.Option(DEFAULT_DASHBOARD_PATH, "--output", "-o", help="Path to write the static HTML dashboard."),
+    limit: int = typer.Option(100, "--limit", help="Number of recent runs to include."),
+    status: str = typer.Option(None, "--status", help="Optional status filter."),
+    run_type: str = typer.Option(None, "--type", help="Optional run type filter, such as agent, team, or tool."),
+    agent: str = typer.Option(None, "--agent", help="Optional agent name or id filter."),
+    team: str = typer.Option(None, "--team", help="Optional team name or id filter."),
+    open_browser: bool = typer.Option(False, "--open", help="Open the generated dashboard in the default browser."),
+):
+    """Generate a static local observability dashboard HTML file."""
+    store = ObservabilityStore()
+    html = build_dashboard_html(
+        store,
+        limit=limit,
+        status=status,
+        run_type=run_type,
+        agent=agent,
+        team=team,
+    )
+    path = write_dashboard_html(html, output)
+    typer.echo(f"Generated observability dashboard: {path}")
+    if open_browser:
+        webbrowser.open(path.resolve().as_uri())
 
 @app.command("failures")
 def failures(

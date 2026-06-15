@@ -1,446 +1,573 @@
 # CLI Commands
 
-This document explains the main Orchgentic CLI commands, when to use them, and gives examples.
+This page lists the primary Orchgentic CLI commands, including the v0.8.0 observability and dashboard commands.
+
+---
 
 ## Workspace
 
-### `orch init`
-
-Initializes an Orchgentic workspace.
+Initialize a workspace:
 
 ```bash
 orch init
 ```
 
-Initialize a specific path:
-
-```bash
-orch init ./my-orchgentic-app
-```
-
-Use this when creating a new local workspace.
-
 ---
 
 ## Agents
 
-### `orch list-agents`
+Create an agent:
 
-Lists configured agents from the `agents/` folder.
+```bash
+orch create-agent Bob
+```
+
+List agents:
 
 ```bash
 orch list-agents
 ```
 
-Use this to confirm that Orchgentic can discover your agent YAML files.
-
-### `orch inspect-agent <AgentName>`
-
-Shows an agent's identity, provider, capabilities, tools, and delegation settings.
+Inspect an agent:
 
 ```bash
 orch inspect-agent Bob
 ```
 
-Use this when validating changes to an agent YAML file.
-
-### `orch preflight-agent <AgentName> --task "..."`
-
-Checks whether an agent appears configured to handle a task before execution.
+Preflight an agent task:
 
 ```bash
-orch preflight-agent Bob --task "what is the local time?"
+orch preflight-agent Bob --task "what time is it locally?"
 ```
 
-Use this to catch missing capabilities or severe configuration problems before running.
-
-### `orch run <AgentName>`
-
-Runs an agent. The CLI prompts for the task.
+Run an agent:
 
 ```bash
 orch run Bob
-```
-
-With debug output:
-
-```bash
 orch run Bob --debug
-```
-
-With plan output:
-
-```bash
 orch run Bob --show-plan
 ```
 
-Skip reflection:
+Judge a route without executing:
 
 ```bash
-orch run Bob --no-reflection
+orch judge-route "what time is it locally?" --agent Bob
 ```
-
-Skip preflight:
-
-```bash
-orch run Bob --no-preflight
-```
-
-Example task:
-
-```text
-Task: what is the local time?
-```
-
-Expected behavior:
-
-```text
-selected_tool: datetime.local
-external_llm_used: false
-```
-
----
-
-## Routing and judgment
-
-### `orch judge-route "task" --agent <AgentName>`
-
-Previews routing, reasoning, workflow, event, policy, and escalation decisions without executing the task.
-
-```bash
-orch judge-route "what is the local time?" --agent Bob
-```
-
-```bash
-orch judge-route "delete gmail message id abcdef123456" --agent Bob
-```
-
-Important: `judge-route` is inspection-only. It does not execute tools, send email, delete email, or run the full workflow.
-
-### `orch judge-route "task" --agent <AgentName> --event-type <type>`
-
-Evaluates a route as if it came from a specific event context.
-
-```bash
-orch judge-route "send a report email" --agent Bob --event-type webhook
-```
-
-Supported event types include:
-
-```text
-manual
-heartbeat
-webhook
-scheduled
-unknown
-```
-
-### `orch route-metrics`
-
-Shows aggregated routing metrics.
-
-```bash
-orch route-metrics
-```
-
-Use this to inspect token-saving and routing telemetry after running tasks.
-
----
-
-## Tools
-
-### `orch list-tools --agent <AgentName>`
-
-Lists tools available to an agent.
-
-```bash
-orch list-tools --agent Bob
-```
-
-Use this to verify that a tool is configured before running a task.
-
-### `orch tool run <tool.name> --agent <AgentName>`
-
-Runs a specific tool directly.
-
-```bash
-orch tool run datetime.local --agent Bob
-```
-
-Pass arguments as repeated `--arg key=value` values:
-
-```bash
-orch tool run filesystem.write \
-  --agent Bob \
-  --arg path=notes/hello.txt \
-  --arg content="Hello from Orchgentic"
-```
-
-Pass JSON with `--args`:
-
-```bash
-orch tool run filesystem.read --agent Bob --args '{"path":"notes/hello.txt"}'
-```
-
-Confirmed Gmail send:
-
-```bash
-orch tool run gmail.send \
-  --agent Bob \
-  --arg to=studio@example.com \
-  --arg subject="Hello" \
-  --arg body="Hello from Bob" \
-  --arg confirm=true
-```
-
-Use direct tool execution when you already know the exact tool and arguments.
 
 ---
 
 ## Teams
 
-### `orch list-teams`
+Create a team:
 
-Lists configured teams from the `teams/` folder.
+```bash
+orch create-team ContentTeam
+```
+
+List teams:
 
 ```bash
 orch list-teams
 ```
 
-### `orch inspect-team <TeamName>`
-
-Shows a team's orchestrator, members, shared context setting, max rounds, and tool availability.
+Inspect a team:
 
 ```bash
-orch inspect-team contentteam
+orch inspect-team ContentTeam
 ```
 
-### `orch preflight-team <TeamName> --task "..."`
-
-Checks whether a team appears configured for a task.
+Preflight a team task:
 
 ```bash
-orch preflight-team contentteam --task "Research AI shopping trends and create an executive summary"
+orch preflight-team ContentTeam --task "Produce a content strategy."
 ```
 
-### `orch run-team <TeamName>`
-
-Runs a team workflow. The CLI prompts for the team task.
+Run a team:
 
 ```bash
-orch run-team contentteam
+orch run-team ContentTeam
+orch run-team ContentTeam --debug
 ```
-
-With debug output:
-
-```bash
-orch run-team contentteam --debug
-```
-
-Example task:
-
-```text
-Research AI is changing how customers shop and create an Executive Summary
-```
-
-Expected behavior:
-
-- Manager assigns work.
-- Researcher contributes findings.
-- Writer creates a draft.
-- Reviewer gives revision feedback.
-- Orchgentic synthesizes the final response.
 
 ---
 
-## Capabilities
+## Tools
 
-### `orch list-capabilities`
-
-Lists high-level capabilities and the tools they resolve to.
+List tools:
 
 ```bash
-orch list-capabilities
+orch list-tools
 ```
 
-Use this when deciding which capabilities to add to an agent YAML file.
-
----
-
-## Triggers
-
-### `orch list-triggers`
-
-Lists configured triggers from the `triggers/` folder.
+Run a tool directly:
 
 ```bash
-orch list-triggers
+orch tool run datetime.local --agent Bob
 ```
 
-### `orch trigger run <trigger_id>`
-
-Runs a trigger once.
+Run a tool with arguments:
 
 ```bash
-orch trigger run bob_heartbeat --debug
+orch tool run filesystem.write --agent Bob --arg path=notes/example.txt --arg content="Hello"
 ```
 
-### `orch trigger heartbeat <trigger_id>`
-
-Starts a heartbeat trigger loop.
+Run a destructive or policy-sensitive tool with confirmation:
 
 ```bash
-orch trigger heartbeat bob_heartbeat --debug
-```
-
-Stop it with `Ctrl+C`.
-
-### `orch serve-webhooks`
-
-Starts the webhook server.
-
-```bash
-orch serve-webhooks
-```
-
-Custom host and port:
-
-```bash
-orch serve-webhooks --host 0.0.0.0 --port 8000
+orch tool run gmail.send \
+  --agent Bob \
+  --arg to=studio@example.com \
+  --arg subject="Observability test" \
+  --arg body="Testing Orchgentic observability." \
+  --arg confirm=true
 ```
 
 ---
 
 ## Memory
 
-### `orch memory recent --agent <AgentName>`
-
-Shows recent memory entries.
+Search memory:
 
 ```bash
-orch memory recent --agent Bob --limit 10
-```
-
-### `orch memory list --agent <AgentName>`
-
-Lists memory entries.
-
-```bash
-orch memory list --agent Bob --limit 50
-```
-
-### `orch memory episodes --agent <AgentName>`
-
-Lists task/response episodes.
-
-```bash
-orch memory episodes --agent Bob --limit 25
-```
-
-### `orch memory search "query" --agent <AgentName>`
-
-Searches memory.
-
-```bash
-orch memory search "Gmail security alert" --agent Bob
-```
-
-### `orch memory clear --agent <AgentName> --yes`
-
-Clears memory for an agent.
-
-```bash
-orch memory clear --agent Bob --yes
+orch memory search "routing decision"
 ```
 
 ---
 
 ## Knowledge
 
-### `orch knowledge ingest <path> --agent <AgentName>`
-
-Ingests a file into the knowledge store.
+Ingest knowledge:
 
 ```bash
-orch knowledge ingest knowledge/example.txt --agent Bob
+orch knowledge ingest docs/README.md
 ```
 
-### `orch knowledge search "query" --agent <AgentName>`
-
-Searches the knowledge store.
+Search knowledge:
 
 ```bash
-orch knowledge search "What is Orchgentic?" --agent Bob
-```
-
-### `orch knowledge list --agent <AgentName>`
-
-Lists ingested knowledge sources.
-
-```bash
-orch knowledge list --agent Bob
-```
-
-### `orch knowledge clear --agent <AgentName> --yes`
-
-Clears the knowledge store.
-
-```bash
-orch knowledge clear --agent Bob --yes
+orch knowledge search "observability"
 ```
 
 ---
 
-## Gmail connections
+## Triggers
 
-### `orch connect gmail --name <connection>`
-
-Connects a named Gmail account using browser OAuth.
+Create a trigger:
 
 ```bash
-orch connect gmail --name assistant
+orch create-trigger heartbeat
 ```
 
-With a specific credentials file:
+Run heartbeat triggers:
 
 ```bash
-orch connect gmail --name assistant --credentials credentials.json
+orch trigger heartbeat
 ```
 
-### `orch gmail list`
-
-Lists named Gmail connections.
+Run webhook server:
 
 ```bash
-orch gmail list
-```
-
-### `orch gmail status --name <connection>`
-
-Shows the status of a Gmail connection.
-
-```bash
-orch gmail status --name assistant
-```
-
-### `orch gmail disconnect --name <connection>`
-
-Disconnects a Gmail connection.
-
-```bash
-orch gmail disconnect --name assistant
+orch trigger webhook
 ```
 
 ---
 
-## Create commands
+# Observability Commands
 
-The `orch create` command group creates configuration files. Use `orch create --help` to see the available subcommands in your installed version.
+Orchgentic v0.8.0 includes native observability commands for run history, trace inspection, exports, retention cleanup, failure diagnostics, and dashboard generation.
 
-Typical generated files include:
+---
+
+## Run History
+
+Show recent runs:
+
+```bash
+orch runs
+```
+
+Limit results:
+
+```bash
+orch runs --limit 10
+```
+
+Filter runs:
+
+```bash
+orch runs --status completed
+orch runs --status failed
+orch runs --status hold_for_confirmation
+orch runs --type agent
+orch runs --type tool
+orch runs --type team
+orch runs --agent Bob
+orch runs --team ContentTeam
+```
+
+JSON output:
+
+```bash
+orch runs --json
+```
+
+---
+
+## Run Details
+
+Inspect one run:
+
+```bash
+orch run-info <run_id>
+```
+
+JSON output:
+
+```bash
+orch run-info <run_id> --json
+```
+
+Show only the run summary:
+
+```bash
+orch run-info <run_id> --summary-only
+```
+
+Show only trace events:
+
+```bash
+orch run-info <run_id> --events-only
+```
+
+---
+
+## Trace Inspection
+
+Show trace events for a run:
+
+```bash
+orch trace <run_id>
+```
+
+Filter trace events:
+
+```bash
+orch trace <run_id> --component tool
+orch trace <run_id> --component policy
+orch trace <run_id> --component routing
+orch trace <run_id> --component provider
+orch trace <run_id> --component agent
+orch trace <run_id> --component team
+```
+
+Filter by event type:
+
+```bash
+orch trace <run_id> --type tool.completed
+orch trace <run_id> --type tool.failed
+orch trace <run_id> --type llm.failed
+orch trace <run_id> --type policy.checked
+```
+
+Show token-relevant trace events:
+
+```bash
+orch trace <run_id> --tokens
+```
+
+JSON output:
+
+```bash
+orch trace <run_id> --json
+```
+
+---
+
+## Exports
+
+Export one run as dashboard-ready JSON:
+
+```bash
+orch export-run <run_id>
+```
+
+Export one run to a file:
+
+```bash
+orch export-run <run_id> --output exports/run.json
+```
+
+Compact JSON:
+
+```bash
+orch export-run <run_id> --compact
+```
+
+Export run history as JSONL:
+
+```bash
+orch export-runs --limit 100
+```
+
+Export run history to a file:
+
+```bash
+orch export-runs --limit 100 --output exports/runs.jsonl
+```
+
+Filter exported run history:
+
+```bash
+orch export-runs --status completed
+orch export-runs --type tool
+orch export-runs --agent Bob
+orch export-runs --team ContentTeam
+```
+
+---
+
+## Run Statistics
+
+Show observability stats:
+
+```bash
+orch runs-stats
+```
+
+JSON output:
+
+```bash
+orch runs-stats --json
+```
+
+Filter stats:
+
+```bash
+orch runs-stats --status completed
+orch runs-stats --type tool
+orch runs-stats --agent Bob
+orch runs-stats --team ContentTeam
+```
+
+---
+
+## Retention and Cleanup
+
+Preview pruning old runs:
+
+```bash
+orch runs-prune --older-than 30d --dry-run
+```
+
+Preview pruning failed runs:
+
+```bash
+orch runs-prune --status failed --dry-run
+```
+
+Preview pruning tool runs:
+
+```bash
+orch runs-prune --type tool --older-than 7d --dry-run
+```
+
+Delete matching runs after preview:
+
+```bash
+orch runs-prune --older-than 30d --no-dry-run --confirm
+```
+
+Delete one run:
+
+```bash
+orch run-delete <run_id> --confirm
+```
+
+Safety notes:
 
 ```text
-agents/<name>.yaml
-teams/<name>.yaml
-triggers/<name>.yaml
+runs-prune defaults to dry-run
+actual pruning requires --no-dry-run --confirm
+run-delete requires --confirm
+deleting a run also deletes its trace events
 ```
+
+Supported retention windows:
+
+```text
+12h
+30d
+2w
+```
+
+---
+
+## Failure Diagnostics
+
+Show failed runs:
+
+```bash
+orch failures
+```
+
+Limit failures:
+
+```bash
+orch failures --limit 20
+```
+
+Filter failures:
+
+```bash
+orch failures --type tool
+orch failures --type agent
+orch failures --type team
+orch failures --agent Bob
+orch failures --team ContentTeam
+```
+
+Group by error type:
+
+```bash
+orch failures --group-by error_type
+```
+
+JSON output:
+
+```bash
+orch failures --json
+```
+
+---
+
+## Static Observability Dashboard
+
+Generate the local dashboard:
+
+```bash
+orch dashboard
+```
+
+Default output:
+
+```text
+exports/orchgentic_observability_dashboard.html
+```
+
+Generate and open the dashboard:
+
+```bash
+orch dashboard --open
+```
+
+Custom output path:
+
+```bash
+orch dashboard --output exports/dashboard.html
+```
+
+Filter dashboard data:
+
+```bash
+orch dashboard --limit 50
+orch dashboard --status completed
+orch dashboard --status failed
+orch dashboard --type tool
+orch dashboard --type agent
+orch dashboard --type team
+orch dashboard --agent Bob
+orch dashboard --team ContentTeam
+```
+
+The dashboard includes:
+
+```text
+total runs
+failure count
+total tokens
+estimated tokens saved
+run breakdown by status
+run breakdown by type
+failure breakdown by error type
+recent runs
+recent failures
+clickable Run IDs
+embedded run detail sections
+trace event timelines
+```
+
+Run IDs in the dashboard are clickable. Clicking a Run ID jumps to an embedded detail section for that run.
+
+Use:
+
+```text
+↑ Minimize
+```
+
+to return from the run detail section back to the dashboard summary.
+
+---
+
+## Common Observability Workflow
+
+Run something:
+
+```bash
+orch run Bob --debug
+```
+
+Find the run:
+
+```bash
+orch runs --agent Bob --limit 5
+```
+
+Inspect the run:
+
+```bash
+orch run-info <run_id>
+```
+
+Inspect token-relevant events:
+
+```bash
+orch trace <run_id> --tokens
+```
+
+Generate the dashboard:
+
+```bash
+orch dashboard --open
+```
+
+Export data for external systems:
+
+```bash
+orch export-run <run_id> --output exports/run.json
+orch export-runs --limit 100 --output exports/runs.jsonl
+```
+
+---
+
+## Token Fields
+
+Observability tracks:
+
+```text
+input_tokens
+output_tokens
+total_tokens
+estimated_tokens_saved
+token_source
+```
+
+Valid `token_source` values:
+
+```text
+actual
+estimated
+not_applicable
+unknown
+```
+
+Token savings are operational estimates, not billing claims. USD cost fields are intentionally omitted.

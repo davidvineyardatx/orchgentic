@@ -347,3 +347,29 @@ def test_observability_store_lists_failures_and_failure_stats(tmp_path):
     assert stats["total_failures"] == 1
     assert stats["by_error_type"]["ToolExecutionError"] == 1
     assert stats["by_type"]["tool"] == 1
+
+
+def test_observability_dashboard_html_export(tmp_path):
+    from orchgentic.observability.dashboard import build_dashboard_html, write_dashboard_html
+
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+    tracer.start_run(run_type="tool", task="datetime.local {}", agent_id="bob", agent_name="Bob")
+    tracer.event("routing.bypassed", component="routing", name="direct_tool", estimated_tokens_saved=349, token_source="estimated")
+    tracer.complete_run()
+
+    html = build_dashboard_html(store, limit=10)
+    assert "Orchgentic Observability" in html
+    assert "RUN DASHBOARD" in html
+    assert "datetime.local" in html
+    assert "saved≈349" in html
+    assert "Run Details:" in html
+    assert "href=\"#run-" in html
+    assert "id=\"run-" in html
+    assert "↑ Minimize" in html
+    assert "a { color: inherit; }" in html
+    assert ".run-link" in html
+
+    output = write_dashboard_html(html, tmp_path / "dashboard.html")
+    assert output.exists()
+    assert "orchgentic.observability.dashboard.v1" in output.read_text(encoding="utf-8")
