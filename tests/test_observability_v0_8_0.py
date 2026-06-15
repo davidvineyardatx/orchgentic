@@ -364,9 +364,12 @@ def test_observability_dashboard_html_export(tmp_path):
     assert "datetime.local" in html
     assert "saved≈349" in html
     assert "Run Details:" in html
-    assert "href=\"#run-" in html
-    assert "id=\"run-" in html
-    assert "↑ Minimize" in html
+    assert "data-run-target=" in html
+    assert "data-run-target=" in html
+    assert "run-detail-modal" in html
+    assert "function openRunModal" in html
+    assert "var runDetails = [" in html or "var runDetails = []" in html
+    assert "Close" in html
     assert "a { color: inherit; }" in html
     assert ".run-link" in html
 

@@ -60,7 +60,7 @@ failure summaries
 token usage
 estimated token savings
 clickable Run IDs
-embedded run details
+modal run details
 trace event timelines
 ```
 

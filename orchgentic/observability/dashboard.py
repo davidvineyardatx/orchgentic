@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from html import escape
+import json
 from pathlib import Path
 from typing import Iterable
 
@@ -66,7 +67,7 @@ def _run_rows(runs: Iterable[RunRecord]) -> str:
         rows.append(
             f"""
             <tr>
-              <td><a class="run-link" href="#{_safe(_anchor_id(run.run_id))}"><code>{_safe(_short_id(run.run_id))}</code></a></td>
+              <td><button class="run-link run-link-button" type="button" data-run-target="{_safe(_anchor_id(run.run_id))}"><code>{_safe(_short_id(run.run_id))}</code></button></td>
               <td><span class="pill {_status_class(run.status)}">{_safe(run.status)}</span></td>
               <td>{_safe(run.run_type)}</td>
               <td>{_safe(_target(run))}</td>
@@ -87,7 +88,7 @@ def _failure_rows(failures: Iterable[RunRecord]) -> str:
         rows.append(
             f"""
             <tr>
-              <td><a class="run-link" href="#{_safe(_anchor_id(run.run_id))}"><code>{_safe(_short_id(run.run_id))}</code></a></td>
+              <td><button class="run-link run-link-button" type="button" data-run-target="{_safe(_anchor_id(run.run_id))}"><code>{_safe(_short_id(run.run_id))}</code></button></td>
               <td>{_safe(run.run_type)}</td>
               <td>{_safe(_target(run))}</td>
               <td>{_safe(error_type)}</td>
@@ -177,6 +178,171 @@ def _run_detail_sections(store: ObservabilityStore, runs: Iterable[RunRecord]) -
             """
         )
     return "\n".join(sections) if sections else ""
+
+
+def _modal_run_detail_templates(store: ObservabilityStore, runs: Iterable[RunRecord]) -> str:
+    templates = []
+    for run in runs:
+        events = store.list_events(run.run_id)
+        templates.append(
+            f"""
+            <template id="{_safe(_anchor_id(run.run_id))}">
+              <div class="modal-detail">
+                <div class="detail-grid">
+                  <div><span>status</span><strong>{_safe(run.status)}</strong></div>
+                  <div><span>type</span><strong>{_safe(run.run_type)}</strong></div>
+                  <div><span>agent/team</span><strong>{_safe(_target(run))}</strong></div>
+                  <div><span>provider</span><strong>{_safe(run.provider)}</strong></div>
+                  <div><span>model</span><strong>{_safe(run.model)}</strong></div>
+                  <div><span>duration_ms</span><strong>{_safe(run.duration_ms)}</strong></div>
+                  <div><span>tokens</span><strong>{_safe(_tokens_label(run))}</strong></div>
+                  <div><span>external_llm_used</span><strong>{_safe(bool(run.external_llm_used))}</strong></div>
+                </div>
+
+                <div class="task-box">
+                  <span>task</span>
+                  <p>{_safe(run.task)}</p>
+                </div>
+
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Timestamp</th>
+                      <th>Event</th>
+                      <th>Component</th>
+                      <th>Status</th>
+                      <th>Name</th>
+                      <th>Message</th>
+                      <th>Tokens</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {_event_rows(events)}
+                  </tbody>
+                </table>
+              </div>
+            </template>
+            """
+        )
+    return "\n".join(templates)
+
+
+def _run_detail_metadata_script(runs: Iterable[RunRecord]) -> str:
+    items = []
+    for run in runs:
+        items.append({
+            "id": _anchor_id(run.run_id),
+            "short_id": _short_id(run.run_id),
+            "run_id": run.run_id or "",
+            "target": _target(run),
+            "status": run.status or "",
+            "run_type": run.run_type or "",
+            "tokens": _tokens_label(run),
+        })
+    return json.dumps(items)
+
+
+def _modal_script(runs: Iterable[RunRecord]) -> str:
+    run_details = _run_detail_metadata_script(runs)
+    script = """
+  <script>
+    (function () {
+      var runDetails = __RUN_DETAILS__;
+      var runDetailById = {};
+      runDetails.forEach(function (item) {
+        runDetailById[item.id] = item;
+      });
+
+      var modal = document.getElementById("run-detail-modal");
+      var modalTitle = document.getElementById("run-detail-modal-title");
+      var modalSubtitle = document.getElementById("run-detail-modal-subtitle");
+      var modalBody = document.getElementById("run-detail-modal-body");
+      var modalClose = document.getElementById("run-detail-modal-close");
+
+      function openRunModal(id) {
+        var template = document.getElementById(id);
+        var metadata = runDetailById[id];
+
+        if (!template || !modal || !modalBody || !metadata) return;
+
+        modalTitle.innerHTML = "Run Details: <code>" + metadata.short_id + "</code>";
+        modalSubtitle.textContent = metadata.run_id + " · " + metadata.target + " · " + metadata.status + " · " + metadata.tokens;
+        modalBody.innerHTML = "";
+        modalBody.appendChild(template.content.cloneNode(true));
+
+        modal.classList.add("open");
+        modal.setAttribute("aria-hidden", "false");
+        history.replaceState(null, "", "#" + id);
+        modalClose.focus();
+      }
+
+      function closeRunModal() {
+        if (!modal) return;
+        modal.classList.remove("open");
+        modal.setAttribute("aria-hidden", "true");
+        if (modalBody) modalBody.innerHTML = "";
+        history.replaceState(null, "", window.location.pathname + window.location.search);
+      }
+
+      document.querySelectorAll("[data-run-target]").forEach(function (control) {
+        control.addEventListener("click", function () {
+          var id = control.getAttribute("data-run-target");
+          openRunModal(id);
+        });
+      });
+
+      if (modalClose) {
+        modalClose.addEventListener("click", closeRunModal);
+      }
+
+      if (modal) {
+        modal.addEventListener("click", function (event) {
+          if (event.target === modal) closeRunModal();
+        });
+      }
+
+      document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") closeRunModal();
+      });
+
+      if (window.location.hash) {
+        var id = window.location.hash.slice(1);
+        if (document.getElementById(id)) {
+          openRunModal(id);
+        }
+      }
+    })();
+  </script>
+"""
+    return script.replace("__RUN_DETAILS__", run_details)
+
+
+
+def _tokens_event_label(event) -> str:
+    if getattr(event, "total_tokens", 0):
+        return f"tokens={event.total_tokens}, source={event.token_source}"
+    if getattr(event, "estimated_tokens_saved", 0):
+        return f"saved≈{event.estimated_tokens_saved}, source={event.token_source}"
+    return getattr(event, "token_source", None) or "-"
+
+
+def _event_rows(events) -> str:
+    rows = []
+    for event in events:
+        rows.append(
+            f"""
+            <tr>
+              <td>{_safe(event.timestamp)}</td>
+              <td>{_safe(event.event_type)}</td>
+              <td>{_safe(event.component)}</td>
+              <td>{_safe(event.status)}</td>
+              <td>{_safe(event.name)}</td>
+              <td>{_safe(event.message)}</td>
+              <td>{_safe(_tokens_event_label(event))}</td>
+            </tr>
+            """
+        )
+    return "\n".join(rows) if rows else '<tr><td colspan="7" class="empty">No trace events found.</td></tr>'
 
 def build_dashboard_html(
     store: ObservabilityStore,
@@ -408,6 +574,80 @@ def build_dashboard_html(
     .empty {{ color: var(--muted); text-align: center; padding: 26px; }}
     .two-col {{ display: grid; grid-template-columns: 1.1fr .9fr; gap: 16px; }}
     footer {{ color: var(--muted); font-size: 12px; margin-top: 18px; text-align: center; }}
+
+    .run-link-button {{
+      border: 0;
+      background: transparent;
+      padding: 0;
+      cursor: pointer;
+      font: inherit;
+    }}
+    .modal-backdrop {{
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 28px;
+      background: rgba(0, 0, 0, .72);
+      backdrop-filter: blur(8px);
+      z-index: 1000;
+    }}
+    .modal-backdrop.open {{
+      display: flex;
+    }}
+    .modal-panel {{
+      width: min(1120px, 96vw);
+      max-height: 88vh;
+      overflow: auto;
+      background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.02)), var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      box-shadow: 0 30px 90px rgba(0,0,0,.55);
+    }}
+    .modal-head {{
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 18px 20px;
+      background: rgba(18, 22, 32, .96);
+      border-bottom: 1px solid var(--line);
+    }}
+    .modal-title {{
+      margin: 0;
+      font-size: 20px;
+      letter-spacing: -0.02em;
+    }}
+    .modal-subtitle {{
+      color: var(--muted);
+      margin-top: 6px;
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }}
+    .modal-close {{
+      border: 1px solid rgba(255, 138, 31, .35);
+      background: rgba(255, 138, 31, .10);
+      color: var(--orange);
+      border-radius: 999px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-weight: 800;
+      font-family: inherit;
+    }}
+    .modal-close:hover {{
+      background: rgba(255, 138, 31, .20);
+    }}
+    .modal-body {{
+      padding: 18px 20px 22px;
+    }}
+    .modal-detail table {{
+      margin-top: 14px;
+    }}
+
     @media (max-width: 900px) {{
       .grid, .two-col {{ grid-template-columns: 1fr; }}
       header {{ flex-direction: column; }}
@@ -500,13 +740,32 @@ def build_dashboard_html(
         </table>
       </section>
 
-      {_run_detail_sections(store, runs)}
+      <div id="run-detail-templates" hidden>
+        {_modal_run_detail_templates(store, runs)}
+      </div>
+
+      <div class="modal-backdrop" id="run-detail-modal" aria-hidden="true">
+        <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="run-detail-modal-title">
+          <div class="modal-head">
+            <div>
+              <h2 class="modal-title" id="run-detail-modal-title">Run Details</h2>
+              <div class="modal-subtitle" id="run-detail-modal-subtitle"></div>
+            </div>
+            <button class="modal-close" id="run-detail-modal-close" type="button">Close</button>
+          </div>
+          <div class="modal-body" id="run-detail-modal-body"></div>
+        </div>
+      </div>
+
     </main>
 
     <footer>
       Exported by Orchgentic. Use <code>orch run-info &lt;run_id&gt;</code> and <code>orch trace &lt;run_id&gt;</code> for full trace inspection.
     </footer>
   </div>
+
+  {_modal_script(runs)}
+
 </body>
 </html>
 """

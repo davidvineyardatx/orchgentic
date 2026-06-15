@@ -76,7 +76,7 @@ failure breakdown by error type
 recent runs
 recent failures
 clickable Run IDs
-embedded run detail sections
+modal run detail views
 trace event timelines
 ```
 
@@ -86,7 +86,7 @@ trace event timelines
 
 Run IDs in the dashboard are clickable.
 
-Clicking a Run ID jumps to an embedded detail section for that run.
+Clicking a Run ID jumps to an modal detail view for that run.
 
 Each link and target are generated together:
 
@@ -105,7 +105,7 @@ trace events
 event messages
 ```
 
-Use `↑ Minimize` to return from the run detail section back to the dashboard summary.
+Use `Close`, click outside the modal, or press `Esc` to return to the dashboard summary.
 
 ---
 
@@ -145,3 +145,21 @@ orch dashboard
 - No frontend build step is required.
 - It reads local observability data only.
 - The dashboard schema label is `orchgentic.observability.dashboard.v1`.
+
+---
+
+## Modal Run Details
+
+Run details open in a modal window.
+
+When a Run ID is selected:
+
+```text
+a modal opens
+run metadata is shown
+task details are shown
+trace events are shown
+the dashboard remains in place behind the modal
+```
+
+Close the modal by selecting `Close`, clicking outside the modal, or pressing `Esc`.

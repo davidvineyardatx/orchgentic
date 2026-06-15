@@ -19,7 +19,7 @@ Generate the local dashboard:
 orch dashboard --open
 ```
 
-The dashboard includes run summaries, failures, token usage, estimated token savings, clickable Run IDs, embedded run details, and trace event timelines.
+The dashboard includes run summaries, failures, token usage, estimated token savings, clickable Run IDs, modal run details, and trace event timelines.
 
 Exports are available for external dashboards:
 

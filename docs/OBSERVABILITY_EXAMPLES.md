@@ -76,4 +76,4 @@ trace event timeline
 event messages
 ```
 
-Use `↑ Minimize` to return to the dashboard summary.
+Use `Close`, click outside the modal, or press `Esc` to return to the dashboard summary.

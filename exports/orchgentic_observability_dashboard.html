@@ -178,6 +178,80 @@
     .empty { color: var(--muted); text-align: center; padding: 26px; }
     .two-col { display: grid; grid-template-columns: 1.1fr .9fr; gap: 16px; }
     footer { color: var(--muted); font-size: 12px; margin-top: 18px; text-align: center; }
+
+    .run-link-button {
+      border: 0;
+      background: transparent;
+      padding: 0;
+      cursor: pointer;
+      font: inherit;
+    }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 28px;
+      background: rgba(0, 0, 0, .72);
+      backdrop-filter: blur(8px);
+      z-index: 1000;
+    }
+    .modal-backdrop.open {
+      display: flex;
+    }
+    .modal-panel {
+      width: min(1120px, 96vw);
+      max-height: 88vh;
+      overflow: auto;
+      background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.02)), var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      box-shadow: 0 30px 90px rgba(0,0,0,.55);
+    }
+    .modal-head {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 18px 20px;
+      background: rgba(18, 22, 32, .96);
+      border-bottom: 1px solid var(--line);
+    }
+    .modal-title {
+      margin: 0;
+      font-size: 20px;
+      letter-spacing: -0.02em;
+    }
+    .modal-subtitle {
+      color: var(--muted);
+      margin-top: 6px;
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+    .modal-close {
+      border: 1px solid rgba(255, 138, 31, .35);
+      background: rgba(255, 138, 31, .10);
+      color: var(--orange);
+      border-radius: 999px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-weight: 800;
+      font-family: inherit;
+    }
+    .modal-close:hover {
+      background: rgba(255, 138, 31, .20);
+    }
+    .modal-body {
+      padding: 18px 20px 22px;
+    }
+    .modal-detail table {
+      margin-top: 14px;
+    }
+
     @media (max-width: 900px) {
       .grid, .two-col { grid-template-columns: 1fr; }
       header { flex-direction: column; }
@@ -194,7 +268,7 @@
         <div class="subtitle">Summary of runs, failures, token usage, and estimated savings.</div>
       </div>
       <div class="meta">
-        generated_at: 2026-06-15T18:39:25.198934+00:00<br />
+        generated_at: 2026-06-15T20:33:50.887376+00:00<br />
         active_filters: limit=100<br />
         schema: orchgentic.observability.dashboard.v1
       </div>
@@ -270,7 +344,7 @@
           <tbody>
             
             <tr>
-              <td><a class="run-link" href="#run-fb995dfd-38fe-4fab-96b2-d7919493d65e"><code>fb995dfd</code></a></td>
+              <td><button class="run-link run-link-button" type="button" data-run-target="run-fb995dfd-38fe-4fab-96b2-d7919493d65e"><code>fb995dfd</code></button></td>
               <td><span class="pill status-completed">completed</span></td>
               <td>tool</td>
               <td>Bob</td>
@@ -281,7 +355,7 @@
             
 
             <tr>
-              <td><a class="run-link" href="#run-21819ac0-d92e-40f1-86ab-75a9b2cc0333"><code>21819ac0</code></a></td>
+              <td><button class="run-link run-link-button" type="button" data-run-target="run-21819ac0-d92e-40f1-86ab-75a9b2cc0333"><code>21819ac0</code></button></td>
               <td><span class="pill status-completed">completed</span></td>
               <td>tool</td>
               <td>Bob</td>
@@ -292,7 +366,7 @@
             
 
             <tr>
-              <td><a class="run-link" href="#run-11b5a0b5-1ad4-4a64-9309-0e17a0561aa2"><code>11b5a0b5</code></a></td>
+              <td><button class="run-link run-link-button" type="button" data-run-target="run-11b5a0b5-1ad4-4a64-9309-0e17a0561aa2"><code>11b5a0b5</code></button></td>
               <td><span class="pill status-hold">hold_for_confirmation</span></td>
               <td>tool</td>
               <td>Bob</td>
@@ -303,7 +377,7 @@
             
 
             <tr>
-              <td><a class="run-link" href="#run-4cab615e-ec6e-407a-beb3-42761ddd3c72"><code>4cab615e</code></a></td>
+              <td><button class="run-link run-link-button" type="button" data-run-target="run-4cab615e-ec6e-407a-beb3-42761ddd3c72"><code>4cab615e</code></button></td>
               <td><span class="pill status-hold">hold_for_confirmation</span></td>
               <td>tool</td>
               <td>Bob</td>
@@ -314,7 +388,7 @@
             
 
             <tr>
-              <td><a class="run-link" href="#run-f0b54593-26ab-4ab4-b3df-14d1301f58ee"><code>f0b54593</code></a></td>
+              <td><button class="run-link run-link-button" type="button" data-run-target="run-f0b54593-26ab-4ab4-b3df-14d1301f58ee"><code>f0b54593</code></button></td>
               <td><span class="pill status-completed">completed</span></td>
               <td>agent</td>
               <td>Bob</td>
@@ -325,7 +399,7 @@
             
 
             <tr>
-              <td><a class="run-link" href="#run-c739c029-0e98-494a-a410-ca1786b3685a"><code>c739c029</code></a></td>
+              <td><button class="run-link run-link-button" type="button" data-run-target="run-c739c029-0e98-494a-a410-ca1786b3685a"><code>c739c029</code></button></td>
               <td><span class="pill status-completed">completed</span></td>
               <td>agent</td>
               <td>Bob</td>
@@ -336,7 +410,7 @@
             
 
             <tr>
-              <td><a class="run-link" href="#run-59f22b56-2e2f-4376-ab25-7c55fb3a1b5d"><code>59f22b56</code></a></td>
+              <td><button class="run-link run-link-button" type="button" data-run-target="run-59f22b56-2e2f-4376-ab25-7c55fb3a1b5d"><code>59f22b56</code></button></td>
               <td><span class="pill status-completed">completed</span></td>
               <td>agent</td>
               <td>Bob</td>
@@ -370,46 +444,40 @@
         </table>
       </section>
 
-      
-            <section class="card section run-detail" id="run-fb995dfd-38fe-4fab-96b2-d7919493d65e">
-              <div class="section-head">
-                <div>
-                  <h2>Run Details: <code>fb995dfd</code></h2>
-                  <div class="detail-subtitle">fb995dfd-38fe-4fab-96b2-d7919493d65e</div>
+      <div id="run-detail-templates" hidden>
+        
+            <template id="run-fb995dfd-38fe-4fab-96b2-d7919493d65e">
+              <div class="modal-detail">
+                <div class="detail-grid">
+                  <div><span>status</span><strong>completed</strong></div>
+                  <div><span>type</span><strong>tool</strong></div>
+                  <div><span>agent/team</span><strong>Bob</strong></div>
+                  <div><span>provider</span><strong>groq</strong></div>
+                  <div><span>model</span><strong>llama-3.3-70b-versatile</strong></div>
+                  <div><span>duration_ms</span><strong>967.74</strong></div>
+                  <div><span>tokens</span><strong>saved≈349, source=estimated</strong></div>
+                  <div><span>external_llm_used</span><strong>False</strong></div>
                 </div>
-                <a class="top-link" href="#top">↑ Minimize</a>
-              </div>
 
-              <div class="detail-grid">
-                <div><span>status</span><strong>completed</strong></div>
-                <div><span>type</span><strong>tool</strong></div>
-                <div><span>agent/team</span><strong>Bob</strong></div>
-                <div><span>provider</span><strong>groq</strong></div>
-                <div><span>model</span><strong>llama-3.3-70b-versatile</strong></div>
-                <div><span>duration_ms</span><strong>967.74</strong></div>
-                <div><span>tokens</span><strong>saved≈349, source=estimated</strong></div>
-                <div><span>external_llm_used</span><strong>False</strong></div>
-              </div>
+                <div class="task-box">
+                  <span>task</span>
+                  <p>datetime.local {}</p>
+                </div>
 
-              <div class="task-box">
-                <span>task</span>
-                <p>datetime.local {}</p>
-              </div>
-
-              <table>
-                <thead>
-                  <tr>
-                    <th>Timestamp</th>
-                    <th>Event</th>
-                    <th>Component</th>
-                    <th>Status</th>
-                    <th>Name</th>
-                    <th>Message</th>
-                    <th>Tokens</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Timestamp</th>
+                      <th>Event</th>
+                      <th>Component</th>
+                      <th>Status</th>
+                      <th>Name</th>
+                      <th>Message</th>
+                      <th>Tokens</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    
             <tr>
               <td>2026-06-15T15:45:49.586510+00:00</td>
               <td>run.started</td>
@@ -475,50 +543,44 @@
               <td>not_applicable</td>
             </tr>
             
-                </tbody>
-              </table>
-            </section>
+                  </tbody>
+                </table>
+              </div>
+            </template>
             
 
-            <section class="card section run-detail" id="run-21819ac0-d92e-40f1-86ab-75a9b2cc0333">
-              <div class="section-head">
-                <div>
-                  <h2>Run Details: <code>21819ac0</code></h2>
-                  <div class="detail-subtitle">21819ac0-d92e-40f1-86ab-75a9b2cc0333</div>
+            <template id="run-21819ac0-d92e-40f1-86ab-75a9b2cc0333">
+              <div class="modal-detail">
+                <div class="detail-grid">
+                  <div><span>status</span><strong>completed</strong></div>
+                  <div><span>type</span><strong>tool</strong></div>
+                  <div><span>agent/team</span><strong>Bob</strong></div>
+                  <div><span>provider</span><strong>groq</strong></div>
+                  <div><span>model</span><strong>llama-3.3-70b-versatile</strong></div>
+                  <div><span>duration_ms</span><strong>1967.23</strong></div>
+                  <div><span>tokens</span><strong>source=not_applicable</strong></div>
+                  <div><span>external_llm_used</span><strong>False</strong></div>
                 </div>
-                <a class="top-link" href="#top">↑ Minimize</a>
-              </div>
 
-              <div class="detail-grid">
-                <div><span>status</span><strong>completed</strong></div>
-                <div><span>type</span><strong>tool</strong></div>
-                <div><span>agent/team</span><strong>Bob</strong></div>
-                <div><span>provider</span><strong>groq</strong></div>
-                <div><span>model</span><strong>llama-3.3-70b-versatile</strong></div>
-                <div><span>duration_ms</span><strong>1967.23</strong></div>
-                <div><span>tokens</span><strong>source=not_applicable</strong></div>
-                <div><span>external_llm_used</span><strong>False</strong></div>
-              </div>
+                <div class="task-box">
+                  <span>task</span>
+                  <p>gmail.send {&#x27;to&#x27;: &#x27;studio@davidvineyard.com&#x27;, &#x27;subject&#x27;: &#x27;Saying Hello!&#x27;, &#x27;body&#x27;: &quot;Hello Marcy. This is an email sent to you by Orchgentic&#x27;s agent Bob&quot;, &#x27;confirm&#x27;: True}</p>
+                </div>
 
-              <div class="task-box">
-                <span>task</span>
-                <p>gmail.send {&#x27;to&#x27;: &#x27;studio@davidvineyard.com&#x27;, &#x27;subject&#x27;: &#x27;Saying Hello!&#x27;, &#x27;body&#x27;: &quot;Hello Marcy. This is an email sent to you by Orchgentic&#x27;s agent Bob&quot;, &#x27;confirm&#x27;: True}</p>
-              </div>
-
-              <table>
-                <thead>
-                  <tr>
-                    <th>Timestamp</th>
-                    <th>Event</th>
-                    <th>Component</th>
-                    <th>Status</th>
-                    <th>Name</th>
-                    <th>Message</th>
-                    <th>Tokens</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Timestamp</th>
+                      <th>Event</th>
+                      <th>Component</th>
+                      <th>Status</th>
+                      <th>Name</th>
+                      <th>Message</th>
+                      <th>Tokens</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    
             <tr>
               <td>2026-06-15T15:27:14.653878+00:00</td>
               <td>run.started</td>
@@ -573,50 +635,44 @@
               <td>not_applicable</td>
             </tr>
             
-                </tbody>
-              </table>
-            </section>
+                  </tbody>
+                </table>
+              </div>
+            </template>
             
 
-            <section class="card section run-detail" id="run-11b5a0b5-1ad4-4a64-9309-0e17a0561aa2">
-              <div class="section-head">
-                <div>
-                  <h2>Run Details: <code>11b5a0b5</code></h2>
-                  <div class="detail-subtitle">11b5a0b5-1ad4-4a64-9309-0e17a0561aa2</div>
+            <template id="run-11b5a0b5-1ad4-4a64-9309-0e17a0561aa2">
+              <div class="modal-detail">
+                <div class="detail-grid">
+                  <div><span>status</span><strong>hold_for_confirmation</strong></div>
+                  <div><span>type</span><strong>tool</strong></div>
+                  <div><span>agent/team</span><strong>Bob</strong></div>
+                  <div><span>provider</span><strong>groq</strong></div>
+                  <div><span>model</span><strong>llama-3.3-70b-versatile</strong></div>
+                  <div><span>duration_ms</span><strong>390.92</strong></div>
+                  <div><span>tokens</span><strong>source=not_applicable</strong></div>
+                  <div><span>external_llm_used</span><strong>False</strong></div>
                 </div>
-                <a class="top-link" href="#top">↑ Minimize</a>
-              </div>
 
-              <div class="detail-grid">
-                <div><span>status</span><strong>hold_for_confirmation</strong></div>
-                <div><span>type</span><strong>tool</strong></div>
-                <div><span>agent/team</span><strong>Bob</strong></div>
-                <div><span>provider</span><strong>groq</strong></div>
-                <div><span>model</span><strong>llama-3.3-70b-versatile</strong></div>
-                <div><span>duration_ms</span><strong>390.92</strong></div>
-                <div><span>tokens</span><strong>source=not_applicable</strong></div>
-                <div><span>external_llm_used</span><strong>False</strong></div>
-              </div>
+                <div class="task-box">
+                  <span>task</span>
+                  <p>gmail.send {&#x27;to&#x27;: &#x27;studio@davidvineyard.com&#x27;, &#x27;subject&#x27;: &#x27;Test&#x27;, &#x27;body&#x27;: &#x27;Hello&#x27;, &#x27;comfirm&#x27;: True}</p>
+                </div>
 
-              <div class="task-box">
-                <span>task</span>
-                <p>gmail.send {&#x27;to&#x27;: &#x27;studio@davidvineyard.com&#x27;, &#x27;subject&#x27;: &#x27;Test&#x27;, &#x27;body&#x27;: &#x27;Hello&#x27;, &#x27;comfirm&#x27;: True}</p>
-              </div>
-
-              <table>
-                <thead>
-                  <tr>
-                    <th>Timestamp</th>
-                    <th>Event</th>
-                    <th>Component</th>
-                    <th>Status</th>
-                    <th>Name</th>
-                    <th>Message</th>
-                    <th>Tokens</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Timestamp</th>
+                      <th>Event</th>
+                      <th>Component</th>
+                      <th>Status</th>
+                      <th>Name</th>
+                      <th>Message</th>
+                      <th>Tokens</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    
             <tr>
               <td>2026-06-15T15:24:06.718442+00:00</td>
               <td>run.started</td>
@@ -649,50 +705,44 @@
               <td>not_applicable</td>
             </tr>
             
-                </tbody>
-              </table>
-            </section>
+                  </tbody>
+                </table>
+              </div>
+            </template>
             
 
-            <section class="card section run-detail" id="run-4cab615e-ec6e-407a-beb3-42761ddd3c72">
-              <div class="section-head">
-                <div>
-                  <h2>Run Details: <code>4cab615e</code></h2>
-                  <div class="detail-subtitle">4cab615e-ec6e-407a-beb3-42761ddd3c72</div>
+            <template id="run-4cab615e-ec6e-407a-beb3-42761ddd3c72">
+              <div class="modal-detail">
+                <div class="detail-grid">
+                  <div><span>status</span><strong>hold_for_confirmation</strong></div>
+                  <div><span>type</span><strong>tool</strong></div>
+                  <div><span>agent/team</span><strong>Bob</strong></div>
+                  <div><span>provider</span><strong>groq</strong></div>
+                  <div><span>model</span><strong>llama-3.3-70b-versatile</strong></div>
+                  <div><span>duration_ms</span><strong>447.68</strong></div>
+                  <div><span>tokens</span><strong>source=not_applicable</strong></div>
+                  <div><span>external_llm_used</span><strong>False</strong></div>
                 </div>
-                <a class="top-link" href="#top">↑ Minimize</a>
-              </div>
 
-              <div class="detail-grid">
-                <div><span>status</span><strong>hold_for_confirmation</strong></div>
-                <div><span>type</span><strong>tool</strong></div>
-                <div><span>agent/team</span><strong>Bob</strong></div>
-                <div><span>provider</span><strong>groq</strong></div>
-                <div><span>model</span><strong>llama-3.3-70b-versatile</strong></div>
-                <div><span>duration_ms</span><strong>447.68</strong></div>
-                <div><span>tokens</span><strong>source=not_applicable</strong></div>
-                <div><span>external_llm_used</span><strong>False</strong></div>
-              </div>
+                <div class="task-box">
+                  <span>task</span>
+                  <p>gmail.send {&#x27;to&#x27;: &#x27;studio@davidvineyard.com&#x27;, &#x27;subject&#x27;: &#x27;Test&#x27;, &#x27;body&#x27;: &#x27;Hello&#x27;}</p>
+                </div>
 
-              <div class="task-box">
-                <span>task</span>
-                <p>gmail.send {&#x27;to&#x27;: &#x27;studio@davidvineyard.com&#x27;, &#x27;subject&#x27;: &#x27;Test&#x27;, &#x27;body&#x27;: &#x27;Hello&#x27;}</p>
-              </div>
-
-              <table>
-                <thead>
-                  <tr>
-                    <th>Timestamp</th>
-                    <th>Event</th>
-                    <th>Component</th>
-                    <th>Status</th>
-                    <th>Name</th>
-                    <th>Message</th>
-                    <th>Tokens</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Timestamp</th>
+                      <th>Event</th>
+                      <th>Component</th>
+                      <th>Status</th>
+                      <th>Name</th>
+                      <th>Message</th>
+                      <th>Tokens</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    
             <tr>
               <td>2026-06-15T15:23:30.361438+00:00</td>
               <td>run.started</td>
@@ -725,50 +775,44 @@
               <td>not_applicable</td>
             </tr>
             
-                </tbody>
-              </table>
-            </section>
+                  </tbody>
+                </table>
+              </div>
+            </template>
             
 
-            <section class="card section run-detail" id="run-f0b54593-26ab-4ab4-b3df-14d1301f58ee">
-              <div class="section-head">
-                <div>
-                  <h2>Run Details: <code>f0b54593</code></h2>
-                  <div class="detail-subtitle">f0b54593-26ab-4ab4-b3df-14d1301f58ee</div>
+            <template id="run-f0b54593-26ab-4ab4-b3df-14d1301f58ee">
+              <div class="modal-detail">
+                <div class="detail-grid">
+                  <div><span>status</span><strong>completed</strong></div>
+                  <div><span>type</span><strong>agent</strong></div>
+                  <div><span>agent/team</span><strong>Bob</strong></div>
+                  <div><span>provider</span><strong>groq</strong></div>
+                  <div><span>model</span><strong>llama-3.3-70b-versatile</strong></div>
+                  <div><span>duration_ms</span><strong>1078.75</strong></div>
+                  <div><span>tokens</span><strong>saved≈343, source=estimated</strong></div>
+                  <div><span>external_llm_used</span><strong>False</strong></div>
                 </div>
-                <a class="top-link" href="#top">↑ Minimize</a>
-              </div>
 
-              <div class="detail-grid">
-                <div><span>status</span><strong>completed</strong></div>
-                <div><span>type</span><strong>agent</strong></div>
-                <div><span>agent/team</span><strong>Bob</strong></div>
-                <div><span>provider</span><strong>groq</strong></div>
-                <div><span>model</span><strong>llama-3.3-70b-versatile</strong></div>
-                <div><span>duration_ms</span><strong>1078.75</strong></div>
-                <div><span>tokens</span><strong>saved≈343, source=estimated</strong></div>
-                <div><span>external_llm_used</span><strong>False</strong></div>
-              </div>
+                <div class="task-box">
+                  <span>task</span>
+                  <p>what is the current time</p>
+                </div>
 
-              <div class="task-box">
-                <span>task</span>
-                <p>what is the current time</p>
-              </div>
-
-              <table>
-                <thead>
-                  <tr>
-                    <th>Timestamp</th>
-                    <th>Event</th>
-                    <th>Component</th>
-                    <th>Status</th>
-                    <th>Name</th>
-                    <th>Message</th>
-                    <th>Tokens</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Timestamp</th>
+                      <th>Event</th>
+                      <th>Component</th>
+                      <th>Status</th>
+                      <th>Name</th>
+                      <th>Message</th>
+                      <th>Tokens</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    
             <tr>
               <td>2026-06-15T13:34:51.596423+00:00</td>
               <td>run.started</td>
@@ -845,50 +889,44 @@
               <td>not_applicable</td>
             </tr>
             
-                </tbody>
-              </table>
-            </section>
+                  </tbody>
+                </table>
+              </div>
+            </template>
             
 
-            <section class="card section run-detail" id="run-c739c029-0e98-494a-a410-ca1786b3685a">
-              <div class="section-head">
-                <div>
-                  <h2>Run Details: <code>c739c029</code></h2>
-                  <div class="detail-subtitle">c739c029-0e98-494a-a410-ca1786b3685a</div>
+            <template id="run-c739c029-0e98-494a-a410-ca1786b3685a">
+              <div class="modal-detail">
+                <div class="detail-grid">
+                  <div><span>status</span><strong>completed</strong></div>
+                  <div><span>type</span><strong>agent</strong></div>
+                  <div><span>agent/team</span><strong>Bob</strong></div>
+                  <div><span>provider</span><strong>groq</strong></div>
+                  <div><span>model</span><strong>llama-3.3-70b-versatile</strong></div>
+                  <div><span>duration_ms</span><strong>3169.97</strong></div>
+                  <div><span>tokens</span><strong>tokens=1678, source=estimated</strong></div>
+                  <div><span>external_llm_used</span><strong>True</strong></div>
                 </div>
-                <a class="top-link" href="#top">↑ Minimize</a>
-              </div>
 
-              <div class="detail-grid">
-                <div><span>status</span><strong>completed</strong></div>
-                <div><span>type</span><strong>agent</strong></div>
-                <div><span>agent/team</span><strong>Bob</strong></div>
-                <div><span>provider</span><strong>groq</strong></div>
-                <div><span>model</span><strong>llama-3.3-70b-versatile</strong></div>
-                <div><span>duration_ms</span><strong>3169.97</strong></div>
-                <div><span>tokens</span><strong>tokens=1678, source=estimated</strong></div>
-                <div><span>external_llm_used</span><strong>True</strong></div>
-              </div>
+                <div class="task-box">
+                  <span>task</span>
+                  <p>Write a short summary of what Orchgentic is.</p>
+                </div>
 
-              <div class="task-box">
-                <span>task</span>
-                <p>Write a short summary of what Orchgentic is.</p>
-              </div>
-
-              <table>
-                <thead>
-                  <tr>
-                    <th>Timestamp</th>
-                    <th>Event</th>
-                    <th>Component</th>
-                    <th>Status</th>
-                    <th>Name</th>
-                    <th>Message</th>
-                    <th>Tokens</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Timestamp</th>
+                      <th>Event</th>
+                      <th>Component</th>
+                      <th>Status</th>
+                      <th>Name</th>
+                      <th>Message</th>
+                      <th>Tokens</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    
             <tr>
               <td>2026-06-15T13:04:14.430479+00:00</td>
               <td>run.started</td>
@@ -1009,50 +1047,44 @@
               <td>not_applicable</td>
             </tr>
             
-                </tbody>
-              </table>
-            </section>
+                  </tbody>
+                </table>
+              </div>
+            </template>
             
 
-            <section class="card section run-detail" id="run-59f22b56-2e2f-4376-ab25-7c55fb3a1b5d">
-              <div class="section-head">
-                <div>
-                  <h2>Run Details: <code>59f22b56</code></h2>
-                  <div class="detail-subtitle">59f22b56-2e2f-4376-ab25-7c55fb3a1b5d</div>
+            <template id="run-59f22b56-2e2f-4376-ab25-7c55fb3a1b5d">
+              <div class="modal-detail">
+                <div class="detail-grid">
+                  <div><span>status</span><strong>completed</strong></div>
+                  <div><span>type</span><strong>agent</strong></div>
+                  <div><span>agent/team</span><strong>Bob</strong></div>
+                  <div><span>provider</span><strong>groq</strong></div>
+                  <div><span>model</span><strong>llama-3.3-70b-versatile</strong></div>
+                  <div><span>duration_ms</span><strong>867.37</strong></div>
+                  <div><span>tokens</span><strong>saved≈342, source=estimated</strong></div>
+                  <div><span>external_llm_used</span><strong>False</strong></div>
                 </div>
-                <a class="top-link" href="#top">↑ Minimize</a>
-              </div>
 
-              <div class="detail-grid">
-                <div><span>status</span><strong>completed</strong></div>
-                <div><span>type</span><strong>agent</strong></div>
-                <div><span>agent/team</span><strong>Bob</strong></div>
-                <div><span>provider</span><strong>groq</strong></div>
-                <div><span>model</span><strong>llama-3.3-70b-versatile</strong></div>
-                <div><span>duration_ms</span><strong>867.37</strong></div>
-                <div><span>tokens</span><strong>saved≈342, source=estimated</strong></div>
-                <div><span>external_llm_used</span><strong>False</strong></div>
-              </div>
+                <div class="task-box">
+                  <span>task</span>
+                  <p>what is the local time?</p>
+                </div>
 
-              <div class="task-box">
-                <span>task</span>
-                <p>what is the local time?</p>
-              </div>
-
-              <table>
-                <thead>
-                  <tr>
-                    <th>Timestamp</th>
-                    <th>Event</th>
-                    <th>Component</th>
-                    <th>Status</th>
-                    <th>Name</th>
-                    <th>Message</th>
-                    <th>Tokens</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Timestamp</th>
+                      <th>Event</th>
+                      <th>Component</th>
+                      <th>Status</th>
+                      <th>Name</th>
+                      <th>Message</th>
+                      <th>Tokens</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    
             <tr>
               <td>2026-06-15T13:01:22.114238+00:00</td>
               <td>run.started</td>
@@ -1107,15 +1139,103 @@
               <td>not_applicable</td>
             </tr>
             
-                </tbody>
-              </table>
-            </section>
+                  </tbody>
+                </table>
+              </div>
+            </template>
             
+      </div>
+
+      <div class="modal-backdrop" id="run-detail-modal" aria-hidden="true">
+        <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="run-detail-modal-title">
+          <div class="modal-head">
+            <div>
+              <h2 class="modal-title" id="run-detail-modal-title">Run Details</h2>
+              <div class="modal-subtitle" id="run-detail-modal-subtitle"></div>
+            </div>
+            <button class="modal-close" id="run-detail-modal-close" type="button">Close</button>
+          </div>
+          <div class="modal-body" id="run-detail-modal-body"></div>
+        </div>
+      </div>
+
     </main>
 
     <footer>
       Exported by Orchgentic. Use <code>orch run-info &lt;run_id&gt;</code> and <code>orch trace &lt;run_id&gt;</code> for full trace inspection.
     </footer>
   </div>
+
+  
+  <script>
+    (function () {
+      var runDetails = [{"id": "run-fb995dfd-38fe-4fab-96b2-d7919493d65e", "short_id": "fb995dfd", "run_id": "fb995dfd-38fe-4fab-96b2-d7919493d65e", "target": "Bob", "status": "completed", "run_type": "tool", "tokens": "saved\u2248349, source=estimated"}, {"id": "run-21819ac0-d92e-40f1-86ab-75a9b2cc0333", "short_id": "21819ac0", "run_id": "21819ac0-d92e-40f1-86ab-75a9b2cc0333", "target": "Bob", "status": "completed", "run_type": "tool", "tokens": "source=not_applicable"}, {"id": "run-11b5a0b5-1ad4-4a64-9309-0e17a0561aa2", "short_id": "11b5a0b5", "run_id": "11b5a0b5-1ad4-4a64-9309-0e17a0561aa2", "target": "Bob", "status": "hold_for_confirmation", "run_type": "tool", "tokens": "source=not_applicable"}, {"id": "run-4cab615e-ec6e-407a-beb3-42761ddd3c72", "short_id": "4cab615e", "run_id": "4cab615e-ec6e-407a-beb3-42761ddd3c72", "target": "Bob", "status": "hold_for_confirmation", "run_type": "tool", "tokens": "source=not_applicable"}, {"id": "run-f0b54593-26ab-4ab4-b3df-14d1301f58ee", "short_id": "f0b54593", "run_id": "f0b54593-26ab-4ab4-b3df-14d1301f58ee", "target": "Bob", "status": "completed", "run_type": "agent", "tokens": "saved\u2248343, source=estimated"}, {"id": "run-c739c029-0e98-494a-a410-ca1786b3685a", "short_id": "c739c029", "run_id": "c739c029-0e98-494a-a410-ca1786b3685a", "target": "Bob", "status": "completed", "run_type": "agent", "tokens": "tokens=1678, source=estimated"}, {"id": "run-59f22b56-2e2f-4376-ab25-7c55fb3a1b5d", "short_id": "59f22b56", "run_id": "59f22b56-2e2f-4376-ab25-7c55fb3a1b5d", "target": "Bob", "status": "completed", "run_type": "agent", "tokens": "saved\u2248342, source=estimated"}];
+      var runDetailById = {};
+      runDetails.forEach(function (item) {
+        runDetailById[item.id] = item;
+      });
+
+      var modal = document.getElementById("run-detail-modal");
+      var modalTitle = document.getElementById("run-detail-modal-title");
+      var modalSubtitle = document.getElementById("run-detail-modal-subtitle");
+      var modalBody = document.getElementById("run-detail-modal-body");
+      var modalClose = document.getElementById("run-detail-modal-close");
+
+      function openRunModal(id) {
+        var template = document.getElementById(id);
+        var metadata = runDetailById[id];
+
+        if (!template || !modal || !modalBody || !metadata) return;
+
+        modalTitle.innerHTML = "Run Details: <code>" + metadata.short_id + "</code>";
+        modalSubtitle.textContent = metadata.run_id + " · " + metadata.target + " · " + metadata.status + " · " + metadata.tokens;
+        modalBody.innerHTML = "";
+        modalBody.appendChild(template.content.cloneNode(true));
+
+        modal.classList.add("open");
+        modal.setAttribute("aria-hidden", "false");
+        history.replaceState(null, "", "#" + id);
+        modalClose.focus();
+      }
+
+      function closeRunModal() {
+        if (!modal) return;
+        modal.classList.remove("open");
+        modal.setAttribute("aria-hidden", "true");
+        if (modalBody) modalBody.innerHTML = "";
+        history.replaceState(null, "", window.location.pathname + window.location.search);
+      }
+
+      document.querySelectorAll("[data-run-target]").forEach(function (control) {
+        control.addEventListener("click", function () {
+          var id = control.getAttribute("data-run-target");
+          openRunModal(id);
+        });
+      });
+
+      if (modalClose) {
+        modalClose.addEventListener("click", closeRunModal);
+      }
+
+      if (modal) {
+        modal.addEventListener("click", function (event) {
+          if (event.target === modal) closeRunModal();
+        });
+      }
+
+      document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape") closeRunModal();
+      });
+
+      if (window.location.hash) {
+        var id = window.location.hash.slice(1);
+        if (document.getElementById(id)) {
+          openRunModal(id);
+        }
+      }
+    })();
+  </script>
+
+
 </body>
 </html>

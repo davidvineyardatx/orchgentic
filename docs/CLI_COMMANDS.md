@@ -492,19 +492,13 @@ failure breakdown by error type
 recent runs
 recent failures
 clickable Run IDs
-embedded run detail sections
+modal run detail views
 trace event timelines
 ```
 
-Run IDs in the dashboard are clickable. Clicking a Run ID jumps to an embedded detail section for that run.
+Run IDs in the dashboard are clickable. Clicking a Run ID opens a modal detail view for that run.
 
-Use:
-
-```text
-↑ Minimize
-```
-
-to return from the run detail section back to the dashboard summary.
+Use `Close`, click outside the modal, or press `Esc` to return to the dashboard summary.
 
 ---
 
