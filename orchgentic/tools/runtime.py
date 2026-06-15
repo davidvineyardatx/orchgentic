@@ -114,13 +114,55 @@ class ToolRuntime:
         tools = self.available_definitions()
 
         if not tools:
-            return await provider.generate(messages), observations
+            llm_started = time.perf_counter()
+            if self.tracer:
+                self.tracer.event("llm.started", component="provider", name="generate", status="started", data={"tool_runtime": False})
+            try:
+                answer = await provider.generate(messages)
+            except Exception as exc:
+                if self.tracer:
+                    self.tracer.event(
+                        "llm.failed",
+                        component="provider",
+                        name="generate",
+                        status="failed",
+                        duration_ms=round((time.perf_counter() - llm_started) * 1000, 2),
+                        message=str(exc),
+                        data={"error_type": type(exc).__name__, "tool_runtime": False},
+                    )
+                raise
+            if self.tracer:
+                self.tracer.event(
+                    "llm.completed",
+                    component="provider",
+                    name="generate",
+                    status="completed",
+                    duration_ms=round((time.perf_counter() - llm_started) * 1000, 2),
+                    input_tokens=estimate_tokens(messages),
+                    output_tokens=estimate_tokens(answer),
+                    token_source="estimated",
+                    data={"tool_runtime": False},
+                )
+            return answer, observations
 
         for iteration in range(self.max_iterations):
             llm_started = time.perf_counter()
             if self.tracer:
                 self.tracer.event("llm.started", component="provider", name="tool_decision", status="started", data={"iteration": iteration + 1})
-            decision_text = await provider.generate_tool_decision(messages, tools, self.max_iterations)
+            try:
+                decision_text = await provider.generate_tool_decision(messages, tools, self.max_iterations)
+            except Exception as exc:
+                if self.tracer:
+                    self.tracer.event(
+                        "llm.failed",
+                        component="provider",
+                        name="tool_decision",
+                        status="failed",
+                        duration_ms=round((time.perf_counter() - llm_started) * 1000, 2),
+                        message=str(exc),
+                        data={"iteration": iteration + 1, "error_type": type(exc).__name__},
+                    )
+                raise
             if self.tracer:
                 self.tracer.event(
                     "llm.completed",
@@ -140,7 +182,20 @@ class ToolRuntime:
                 tool_started = time.perf_counter()
                 if self.tracer:
                     self.tracer.event("tool.started", component="tool", name=call.tool_name, status="started", data={"iteration": iteration + 1, "arguments": call.arguments})
-                result = await self.execute_tool_call(call)
+                try:
+                    result = await self.execute_tool_call(call)
+                except Exception as exc:
+                    if self.tracer:
+                        self.tracer.event(
+                            "tool.failed",
+                            component="tool",
+                            name=call.tool_name,
+                            status="failed",
+                            duration_ms=round((time.perf_counter() - tool_started) * 1000, 2),
+                            message=str(exc),
+                            data={"iteration": iteration + 1, "arguments": call.arguments, "error_type": type(exc).__name__},
+                        )
+                    raise
                 if self.tracer:
                     self.tracer.event(
                         "tool.completed" if result.success else "tool.failed",
@@ -192,7 +247,20 @@ class ToolRuntime:
         llm_started = time.perf_counter()
         if self.tracer:
             self.tracer.event("llm.started", component="provider", name="final_after_tool_limit", status="started")
-        final_answer = await provider.generate(final_messages)
+        try:
+            final_answer = await provider.generate(final_messages)
+        except Exception as exc:
+            if self.tracer:
+                self.tracer.event(
+                    "llm.failed",
+                    component="provider",
+                    name="final_after_tool_limit",
+                    status="failed",
+                    duration_ms=round((time.perf_counter() - llm_started) * 1000, 2),
+                    message=str(exc),
+                    data={"error_type": type(exc).__name__},
+                )
+            raise
         if self.tracer:
             self.tracer.event(
                 "llm.completed",

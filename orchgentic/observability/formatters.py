@@ -97,11 +97,17 @@ def format_event_list(events: list[TraceEvent], *, title: str = "TRACE EVENTS") 
         token_info = _token_summary(event)
         name = f"/{event.name}" if event.name else ""
         duration = f" duration_ms={event.duration_ms}" if event.duration_ms is not None else ""
-        msg = f" - {event.message}" if event.message else ""
-        lines.append(
+
+        # Build the line in explicit segments so the optional message always has
+        # a readable separator. This avoids output like:
+        #   source=estimated- Direct tool execution...
+        line = (
             f"- [{event.timestamp}] {event.event_type} "
-            f"({event.component}{name}) status={event.status}{duration} {token_info}{msg}"
+            f"({event.component}{name}) status={event.status}{duration} {token_info}"
         )
+        if event.message:
+            line += f" - {event.message}"
+        lines.append(line)
     return "\n".join(lines)
 
 

@@ -133,3 +133,152 @@ def test_observability_event_filters_component_type_and_tokens(tmp_path):
     assert [event.event_type for event in store.list_events(run.run_id, event_type="llm.completed")] == ["llm.completed"]
     token_events = store.list_events(run.run_id, tokens_only=True)
     assert [event.event_type for event in token_events] == ["routing.completed", "llm.completed"]
+
+
+def test_observability_records_policy_checked_event_shape(tmp_path):
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+    run = tracer.start_run(run_type="tool", task="gmail.send", agent_id="bob", agent_name="Bob")
+    tracer.event(
+        "policy.checked",
+        component="policy",
+        name="hold_for_confirmation",
+        status="hold_for_confirmation",
+        message="Tool 'gmail.send' requires explicit confirmation.",
+        data={"action": "hold_for_confirmation", "affected_tools": ["gmail.send"]},
+    )
+    tracer.complete_run(status="hold_for_confirmation")
+
+    events = store.list_events(run.run_id, component="policy")
+    assert len(events) == 1
+    assert events[0].event_type == "policy.checked"
+    assert events[0].status == "hold_for_confirmation"
+
+
+def test_observability_records_failure_event_shapes(tmp_path):
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+    run = tracer.start_run(run_type="team", task="team failure", team_name="ContentTeam")
+    tracer.event("team.started", component="team", name="ContentTeam", status="started")
+    tracer.event("team.member.started", component="team", name="Researcher", status="started")
+    tracer.event("agent.failed", component="agent", name="Researcher", status="failed", message="provider unavailable")
+    tracer.event("team.member.failed", component="team", name="Researcher", status="failed", message="provider unavailable")
+    tracer.event("team.failed", component="team", name="ContentTeam", status="failed", message="provider unavailable")
+    tracer.fail_run(RuntimeError("provider unavailable"))
+
+    loaded = store.get_run(run.run_id)
+    event_types = [event.event_type for event in store.list_events(run.run_id)]
+    assert loaded.status == "failed"
+    assert "agent.failed" in event_types
+    assert "team.member.failed" in event_types
+    assert "team.failed" in event_types
+
+
+def test_direct_tool_policy_preview_blocks_disabled_tool():
+    from orchgentic.observability.policy_preview import preview_tool_policy_decision
+
+    class Cfg:
+        tool_policies = {"gmail.delete": {"enabled": False, "require_confirmation": True}}
+
+    decision = preview_tool_policy_decision("gmail.delete", {"message_id": "abc"}, Cfg())
+    assert decision["action"] == "block"
+    assert decision["allowed"] is False
+    assert decision["external_llm_allowed"] is False
+
+
+def test_direct_tool_policy_preview_holds_confirmation():
+    from orchgentic.observability.policy_preview import preview_tool_policy_decision
+
+    class Cfg:
+        tool_policies = {"gmail.send": {"enabled": True, "require_confirmation": True, "send_policy": {"mode": "restricted", "allowed_addresses": ["studio@example.com"], "allowed_domains": [], "require_confirmation": True}}}
+
+    decision = preview_tool_policy_decision("gmail.send", {"to": "studio@example.com"}, Cfg())
+    assert decision["action"] == "hold_for_confirmation"
+    assert decision["require_confirmation"] is True
+
+    confirmed = preview_tool_policy_decision("gmail.send", {"to": "studio@example.com", "confirm": True}, Cfg())
+    assert confirmed["action"] == "allow"
+
+
+def test_direct_tool_runs_can_record_estimated_token_savings(tmp_path):
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+    run = tracer.start_run(run_type="tool", task="gmail.send", agent_id="bob", agent_name="Bob")
+    tracer.event(
+        "routing.bypassed",
+        component="routing",
+        name="direct_tool",
+        status="completed",
+        message="Direct tool execution bypassed LLM routing.",
+        estimated_tokens_saved=321,
+        token_source="estimated",
+        data={"savings_reason": "direct_tool_execution_bypassed_llm_routing"},
+    )
+    tracer.event("policy.checked", component="policy", name="allow", status="allow")
+    tracer.event("tool.started", component="tool", name="gmail.send", status="started")
+    tracer.event("tool.completed", component="tool", name="gmail.send", status="completed")
+    tracer.complete_run()
+
+    loaded = store.get_run(run.run_id)
+    events = store.list_events(run.run_id)
+    assert loaded.estimated_tokens_saved == 321
+    assert loaded.token_source == TOKEN_SOURCE_ESTIMATED
+    assert [event.event_type for event in events][1] == "routing.bypassed"
+    assert events[1].estimated_tokens_saved == 321
+    assert events[1].data["savings_reason"] == "direct_tool_execution_bypassed_llm_routing"
+
+
+
+def test_observability_export_run_detail_has_stable_schema(tmp_path):
+    import json
+    from orchgentic.observability.exporters import SCHEMA_VERSION, export_run_detail
+
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+    run = tracer.start_run(run_type="agent", task="hello", agent_id="bob", agent_name="Bob")
+    tracer.event("agent.started", component="agent", name="Bob", status="started")
+    tracer.event("agent.completed", component="agent", name="Bob", status="completed")
+    tracer.complete_run()
+
+    payload = json.loads(export_run_detail(store, run.run_id))
+    assert payload["schema_version"] == SCHEMA_VERSION
+    assert payload["export_type"] == "run_detail"
+    assert payload["run"]["run_id"] == run.run_id
+    assert [event["event_type"] for event in payload["events"]] == [
+        "run.started",
+        "agent.started",
+        "agent.completed",
+        "run.completed",
+    ]
+    assert "estimated_cost_usd" not in payload["run"]
+
+
+def test_observability_export_runs_jsonl_filters_history(tmp_path):
+    import json
+    from orchgentic.observability.exporters import SCHEMA_VERSION, export_runs_jsonl
+
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+    tracer.start_run(run_type="agent", task="hello", agent_id="bob", agent_name="Bob")
+    tracer.complete_run()
+
+    tracer = TraceCollector(store=store)
+    tracer.start_run(run_type="team", task="summary", team_id="contentteam", team_name="ContentTeam")
+    tracer.complete_run()
+
+    lines = [line for line in export_runs_jsonl(store, run_type="team").splitlines() if line.strip()]
+    assert len(lines) == 1
+    payload = json.loads(lines[0])
+    assert payload["schema_version"] == SCHEMA_VERSION
+    assert payload["export_type"] == "run_summary"
+    assert payload["run"]["run_type"] == "team"
+    assert payload["run"]["team_name"] == "ContentTeam"
+
+
+def test_observability_export_writer_creates_parent_directories(tmp_path):
+    from orchgentic.observability.exporters import write_export_text
+
+    output = tmp_path / "exports" / "run.json"
+    write_export_text("{}", output)
+    assert output.exists()
+    assert output.read_text(encoding="utf-8") == "{}"

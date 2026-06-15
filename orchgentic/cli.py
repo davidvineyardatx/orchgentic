@@ -30,6 +30,7 @@ from orchgentic.teams.registry import TeamRegistry
 from orchgentic.orchestration.team_runner import TeamRunner
 from orchgentic.runtime.preflight import CapabilityPreflight
 from orchgentic.observability import ObservabilityStore, TraceCollector
+from orchgentic.observability.policy_preview import preview_tool_policy_decision
 from orchgentic.observability.formatters import (
     format_run_list,
     format_run_detail,
@@ -38,6 +39,11 @@ from orchgentic.observability.formatters import (
     format_run_json,
     format_runs_json,
     format_events_json,
+)
+from orchgentic.observability.exporters import (
+    export_run_detail,
+    export_runs_jsonl,
+    write_export_text,
 )
 
 app = typer.Typer()
@@ -474,6 +480,42 @@ def trace(
     events = store.list_events(run.run_id, event_type=event_type, component=component, tokens_only=tokens)
     typer.echo(format_events_json(events) if json_output else format_event_list(events))
 
+
+@app.command("export-run")
+def export_run(
+    run_id: str,
+    output: Path = typer.Option(None, "--output", "-o", help="Optional path to write the run export JSON."),
+    compact: bool = typer.Option(False, "--compact", help="Emit compact JSON instead of pretty JSON."),
+):
+    """Export one run and its events as dashboard-ready JSON."""
+    store = ObservabilityStore()
+    run = _resolve_run(store, run_id)
+    text = export_run_detail(store, run.run_id, pretty=not compact)
+    if output:
+        write_export_text(text, output)
+        typer.echo(f"Exported run {run.run_id} to {output}")
+    else:
+        typer.echo(text)
+
+
+@app.command("export-runs")
+def export_runs(
+    limit: int = typer.Option(100, "--limit", help="Number of recent runs to export."),
+    status: str = typer.Option(None, "--status", help="Optional status filter, such as completed, failed, blocked, or hold_for_confirmation."),
+    run_type: str = typer.Option(None, "--type", help="Optional run type filter, such as agent, team, or tool."),
+    agent: str = typer.Option(None, "--agent", help="Optional agent name or id filter."),
+    team: str = typer.Option(None, "--team", help="Optional team name or id filter."),
+    output: Path = typer.Option(None, "--output", "-o", help="Optional path to write JSONL run history export."),
+):
+    """Export run history as dashboard-ready JSONL."""
+    store = ObservabilityStore()
+    text = export_runs_jsonl(store, limit=limit, status=status, run_type=run_type, agent=agent, team=team)
+    if output:
+        write_export_text(text, output)
+        typer.echo(f"Exported run history to {output}")
+    else:
+        typer.echo(text)
+
 @app.command("list-agents")
 def list_agents():
     registry = AgentRegistry()
@@ -768,6 +810,7 @@ def _parse_key_value_args(arg_items):
     return parsed
 
 
+
 @tool_app.command("run")
 def tool_run(
     tool_name: str,
@@ -804,6 +847,52 @@ def tool_run(
         tracer = TraceCollector()
         tracer.start_run(run_type="tool", task=f"{tool_name} {parsed_args}", agent_id=cfg.id, agent_name=cfg.name, provider=getattr(cfg.provider, "type", None), model=getattr(cfg.provider, "model", None), metadata={"source": "cli", "tool": tool_name})
         try:
+            # Direct tool execution intentionally bypasses natural-language LLM/tool-selection
+            # routing. Record that bypass as estimated token savings so `orch run-info`
+            # reflects the real cost advantage of explicit tool commands. This is an
+            # estimate only; no provider call is made and no USD cost is recorded.
+            direct_tool_task = f"{tool_name} {parsed_args}"
+            token_estimate = estimate_route_savings(
+                system_prompt=getattr(cfg, "instructions", ""),
+                tool_context={
+                    "selected_tool": tool_name,
+                    "arguments": parsed_args,
+                    "execution_mode": "direct_tool",
+                },
+                task=direct_tool_task,
+                expected_completion_tokens=300,
+            )
+            tracer.event(
+                "routing.bypassed",
+                component="routing",
+                name="direct_tool",
+                status="completed",
+                message="Direct tool execution bypassed LLM routing.",
+                estimated_tokens_saved=token_estimate.total,
+                token_source="estimated",
+                data={
+                    "savings_reason": "direct_tool_execution_bypassed_llm_routing",
+                    "selected_tool": tool_name,
+                    "arguments": parsed_args,
+                    "token_estimate": token_estimate.to_dict(),
+                },
+            )
+
+            policy_decision = preview_tool_policy_decision(tool_name, parsed_args, cfg)
+            policy_action = policy_decision.get("action", "unknown")
+            tracer.event(
+                "policy.checked",
+                component="policy",
+                name=policy_action,
+                status=policy_action if policy_action in {"allow", "block", "hold_for_confirmation"} else "completed",
+                message=policy_decision.get("reason"),
+                data=policy_decision,
+            )
+            if policy_action in {"block", "hold_for_confirmation"}:
+                tracer.complete_run(status=policy_action, message=policy_decision.get("reason") or "Tool execution stopped by policy.")
+                typer.echo(policy_decision.get("reason") or "Tool execution stopped by policy.")
+                return
+
             tracer.event("tool.started", component="tool", name=tool_name, status="started", data={"arguments": parsed_args})
             result = await tool.execute(**parsed_args)
             tracer.event("tool.completed" if getattr(result, "success", False) else "tool.failed", component="tool", name=tool_name, status="completed" if getattr(result, "success", False) else "failed", message=getattr(result, "error", None), data={"success": getattr(result, "success", None), "arguments": parsed_args})
