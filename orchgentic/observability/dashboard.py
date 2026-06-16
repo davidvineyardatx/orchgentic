@@ -66,7 +66,7 @@ def _run_rows(runs: Iterable[RunRecord]) -> str:
     for run in runs:
         rows.append(
             f"""
-            <tr>
+            <tr data-dashboard-row="run" data-status="{_safe(run.status)}" data-type="{_safe(run.run_type)}" data-search="{_safe((run.run_id or '') + ' ' + (run.status or '') + ' ' + (run.run_type or '') + ' ' + _target(run) + ' ' + (run.task or ''))}">
               <td><button class="run-link run-link-button" type="button" data-run-target="{_safe(_anchor_id(run.run_id))}"><code>{_safe(_short_id(run.run_id))}</code></button></td>
               <td><span class="pill {_status_class(run.status)}">{_safe(run.status)}</span></td>
               <td>{_safe(run.run_type)}</td>
@@ -77,7 +77,7 @@ def _run_rows(runs: Iterable[RunRecord]) -> str:
             </tr>
             """
         )
-    return "\n".join(rows) if rows else '<tr><td colspan="7" class="empty">No runs found.</td></tr>'
+    return "\n".join(rows) if rows else '<tr id="runs-empty-base"><td colspan="7" class="empty">No runs found. Generate an agent, tool, or team run and refresh the dashboard.</td></tr>'
 
 
 def _failure_rows(failures: Iterable[RunRecord]) -> str:
@@ -87,7 +87,7 @@ def _failure_rows(failures: Iterable[RunRecord]) -> str:
         summary = run.error_message or "Inspect trace events for details."
         rows.append(
             f"""
-            <tr>
+            <tr data-dashboard-row="failure" data-status="{_safe(run.status)}" data-type="{_safe(run.run_type)}" data-search="{_safe((run.run_id or '') + ' ' + (run.run_type or '') + ' ' + _target(run) + ' ' + error_type + ' ' + summary)}">
               <td><button class="run-link run-link-button" type="button" data-run-target="{_safe(_anchor_id(run.run_id))}"><code>{_safe(_short_id(run.run_id))}</code></button></td>
               <td>{_safe(run.run_type)}</td>
               <td>{_safe(_target(run))}</td>
@@ -96,7 +96,7 @@ def _failure_rows(failures: Iterable[RunRecord]) -> str:
             </tr>
             """
         )
-    return "\n".join(rows) if rows else '<tr><td colspan="5" class="empty">No failed runs found.</td></tr>'
+    return "\n".join(rows) if rows else '<tr id="failures-empty-base"><td colspan="5" class="empty">No failures found. That is a good sign — failed runs will appear here when diagnostics are available.</td></tr>'
 
 
 
@@ -238,6 +238,10 @@ def _run_detail_metadata_script(runs: Iterable[RunRecord]) -> str:
             "status": run.status or "",
             "run_type": run.run_type or "",
             "tokens": _tokens_label(run),
+            "task": run.task or "",
+            "run_info_command": f"orch run-info {run.run_id}",
+            "trace_command": f"orch trace {run.run_id}",
+            "export_command": f"orch export-run {run.run_id} --output exports/run-{_short_id(run.run_id)}.json",
         })
     return json.dumps(items)
 
@@ -258,6 +262,8 @@ def _modal_script(runs: Iterable[RunRecord]) -> str:
       var modalSubtitle = document.getElementById("run-detail-modal-subtitle");
       var modalBody = document.getElementById("run-detail-modal-body");
       var modalClose = document.getElementById("run-detail-modal-close");
+      var copyStatus = document.getElementById("copy-status");
+      var currentRunMetadata = null;
 
       function openRunModal(id) {
         var template = document.getElementById(id);
@@ -268,6 +274,8 @@ def _modal_script(runs: Iterable[RunRecord]) -> str:
         modalTitle.innerHTML = "Run Details: <code>" + metadata.short_id + "</code>";
         modalSubtitle.textContent = metadata.run_id + " · " + metadata.target + " · " + metadata.status + " · " + metadata.tokens;
         modalBody.innerHTML = "";
+        currentRunMetadata = metadata;
+        if (copyStatus) copyStatus.textContent = "";
         modalBody.appendChild(template.content.cloneNode(true));
 
         modal.classList.add("open");
@@ -281,8 +289,207 @@ def _modal_script(runs: Iterable[RunRecord]) -> str:
         modal.classList.remove("open");
         modal.setAttribute("aria-hidden", "true");
         if (modalBody) modalBody.innerHTML = "";
+        currentRunMetadata = null;
+        if (copyStatus) copyStatus.textContent = "";
         history.replaceState(null, "", window.location.pathname + window.location.search);
       }
+
+
+      function copyText(value, label) {
+        if (!value) return;
+        function copied() {
+          if (copyStatus) {
+            copyStatus.textContent = "Copied " + label;
+            setTimeout(function () { copyStatus.textContent = ""; }, 1800);
+          }
+        }
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(value).then(copied).catch(function () {
+            fallbackCopy(value);
+            copied();
+          });
+        } else {
+          fallbackCopy(value);
+          copied();
+        }
+      }
+
+      function fallbackCopy(value) {
+        var textArea = document.createElement("textarea");
+        textArea.value = value;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try { document.execCommand("copy"); } catch (error) {}
+        document.body.removeChild(textArea);
+      }
+
+      document.querySelectorAll("[data-copy-action]").forEach(function (button) {
+        button.addEventListener("click", function () {
+          if (!currentRunMetadata) return;
+          var action = button.getAttribute("data-copy-action");
+          if (action === "run_id") copyText(currentRunMetadata.run_id, "Run ID");
+          if (action === "run_info") copyText(currentRunMetadata.run_info_command, "run-info command");
+          if (action === "trace") copyText(currentRunMetadata.trace_command, "trace command");
+          if (action === "export") copyText(currentRunMetadata.export_command, "export command");
+        });
+      });
+
+      var dashboardSearch = document.getElementById("dashboard-search");
+      var filterButtons = document.querySelectorAll("[data-filter-kind]");
+      var visibleRunCount = document.getElementById("visible-run-count");
+      var metadataVisibleRunCount = document.getElementById("metadata-visible-run-count");
+      var filteredEmptyRow = document.getElementById("runs-empty-filtered");
+      var pageSizeSelect = document.getElementById("page-size-select");
+      var pageFirst = document.getElementById("page-first");
+      var pagePrev = document.getElementById("page-prev");
+      var pageNext = document.getElementById("page-next");
+      var pageLast = document.getElementById("page-last");
+      var pageLabel = document.getElementById("page-label");
+      var paginationRange = document.getElementById("pagination-range");
+      var activeFilter = { kind: "all", value: "all" };
+      var currentPage = 1;
+
+      function selectedPageSize() {
+        if (!pageSizeSelect || pageSizeSelect.value === "all") return Infinity;
+        var parsed = parseInt(pageSizeSelect.value, 10);
+        return isNaN(parsed) || parsed <= 0 ? 50 : parsed;
+      }
+
+      function applyDashboardFilters() {
+        var query = dashboardSearch ? dashboardSearch.value.toLowerCase().trim() : "";
+        var matchingRows = [];
+        var allRows = Array.prototype.slice.call(document.querySelectorAll("[data-dashboard-row='run']"));
+
+        allRows.forEach(function (row) {
+          var searchText = (row.getAttribute("data-search") || "").toLowerCase();
+          var status = row.getAttribute("data-status") || "";
+          var type = row.getAttribute("data-type") || "";
+
+          var matchesSearch = !query || searchText.indexOf(query) !== -1;
+          var matchesQuickFilter =
+            activeFilter.kind === "all" ||
+            (activeFilter.kind === "status" && status === activeFilter.value) ||
+            (activeFilter.kind === "type" && type === activeFilter.value);
+
+          if (matchesSearch && matchesQuickFilter) matchingRows.push(row);
+        });
+
+        var matchingCount = matchingRows.length;
+        var pageSize = selectedPageSize();
+        var totalPages = pageSize === Infinity ? 1 : Math.max(1, Math.ceil(matchingCount / pageSize));
+        if (currentPage > totalPages) currentPage = totalPages;
+        if (currentPage < 1) currentPage = 1;
+
+        var startIndex = pageSize === Infinity ? 0 : (currentPage - 1) * pageSize;
+        var endIndex = pageSize === Infinity ? matchingCount : Math.min(startIndex + pageSize, matchingCount);
+
+        allRows.forEach(function (row) {
+          row.style.display = "none";
+        });
+
+        matchingRows.slice(startIndex, endIndex).forEach(function (row) {
+          row.style.display = "";
+        });
+
+        if (visibleRunCount) visibleRunCount.textContent = matchingCount;
+        if (metadataVisibleRunCount) metadataVisibleRunCount.textContent = matchingCount;
+
+        if (filteredEmptyRow) {
+          var hasLoadedRows = allRows.length > 0;
+          filteredEmptyRow.style.display = hasLoadedRows && matchingCount === 0 ? "" : "none";
+        }
+
+        if (paginationRange) {
+          var first = matchingCount === 0 ? 0 : startIndex + 1;
+          var last = matchingCount === 0 ? 0 : endIndex;
+          paginationRange.textContent = "Showing " + first + "–" + last + " of " + matchingCount + " matching runs";
+        }
+
+        if (pageLabel) pageLabel.textContent = "Page " + currentPage + " of " + totalPages;
+
+        var disableBack = currentPage <= 1 || matchingCount === 0;
+        var disableForward = currentPage >= totalPages || matchingCount === 0;
+        if (pageFirst) pageFirst.disabled = disableBack;
+        if (pagePrev) pagePrev.disabled = disableBack;
+        if (pageNext) pageNext.disabled = disableForward;
+        if (pageLast) pageLast.disabled = disableForward;
+      }
+
+      if (dashboardSearch) {
+        dashboardSearch.addEventListener("input", function () {
+          currentPage = 1;
+    
+      if (pageSizeSelect) {
+        pageSizeSelect.addEventListener("change", function () {
+          currentPage = 1;
+          applyDashboardFilters();
+        });
+      }
+      if (pageFirst) {
+        pageFirst.addEventListener("click", function () {
+          currentPage = 1;
+          applyDashboardFilters();
+        });
+      }
+      if (pagePrev) {
+        pagePrev.addEventListener("click", function () {
+          currentPage -= 1;
+          applyDashboardFilters();
+        });
+      }
+      if (pageNext) {
+        pageNext.addEventListener("click", function () {
+          currentPage += 1;
+          applyDashboardFilters();
+        });
+      }
+      if (pageLast) {
+        pageLast.addEventListener("click", function () {
+          var pageSize = selectedPageSize();
+          var matchingCount = Array.prototype.slice.call(document.querySelectorAll("[data-dashboard-row='run']")).filter(function (row) {
+            return row.style.display !== "none" || true;
+          }).length;
+          var query = dashboardSearch ? dashboardSearch.value.toLowerCase().trim() : "";
+          var allRows = Array.prototype.slice.call(document.querySelectorAll("[data-dashboard-row='run']"));
+          var filteredCount = allRows.filter(function (row) {
+            var searchText = (row.getAttribute("data-search") || "").toLowerCase();
+            var status = row.getAttribute("data-status") || "";
+            var type = row.getAttribute("data-type") || "";
+            var matchesSearch = !query || searchText.indexOf(query) !== -1;
+            var matchesQuickFilter =
+              activeFilter.kind === "all" ||
+              (activeFilter.kind === "status" && status === activeFilter.value) ||
+              (activeFilter.kind === "type" && type === activeFilter.value);
+            return matchesSearch && matchesQuickFilter;
+          }).length;
+          currentPage = pageSize === Infinity ? 1 : Math.max(1, Math.ceil(filteredCount / pageSize));
+          applyDashboardFilters();
+        });
+      }
+
+      applyDashboardFilters();
+        });
+      }
+
+      filterButtons.forEach(function (button) {
+        button.addEventListener("click", function () {
+          filterButtons.forEach(function (item) { item.classList.remove("active"); });
+          button.classList.add("active");
+          activeFilter = {
+            kind: button.getAttribute("data-filter-kind"),
+            value: button.getAttribute("data-filter-value")
+          };
+          currentPage = 1;
+          applyDashboardFilters();
+        });
+      });
+
+      applyDashboardFilters();
+
 
       document.querySelectorAll("[data-run-target]").forEach(function (control) {
         control.addEventListener("click", function () {
@@ -375,6 +582,10 @@ def build_dashboard_html(
     success_rate = f"{round((completed / total) * 100, 1)}%" if total else "0%"
 
     generated_at = datetime.now(timezone.utc).isoformat()
+    db_path = getattr(store, "db_path", None) or getattr(store, "path", None) or "-"
+    loaded_runs_count = len(runs)
+    loaded_failures_count = len(failures)
+    schema_label = "orchgentic.observability.v1"
 
     by_status = stats.get("by_status") or {}
     status_chips = " ".join(
@@ -648,8 +859,154 @@ def build_dashboard_html(
       margin-top: 14px;
     }}
 
+
+
+    .metadata-grid {{
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }}
+    .metadata-item {{
+      background: rgba(255,255,255,.025);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px;
+    }}
+    .metadata-item span {{
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-bottom: 5px;
+    }}
+    .metadata-item strong {{
+      display: block;
+      overflow-wrap: anywhere;
+      font-size: 13px;
+      font-weight: 800;
+    }}
+    .dynamic-empty {{
+      color: var(--muted);
+      text-align: center;
+      padding: 22px;
+      border-top: 1px solid var(--line);
+    }}
+
+
+    .pagination-controls {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }}
+    .pagination-actions {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }}
+    .page-button {{
+      color: var(--muted);
+      background: rgba(255,255,255,.035);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 11px;
+      cursor: pointer;
+      font-family: inherit;
+      font-weight: 700;
+      font-size: 12px;
+    }}
+    .page-button:hover:not(:disabled) {{
+      color: var(--orange);
+      border-color: rgba(255, 138, 31, .55);
+      background: rgba(255, 138, 31, .10);
+    }}
+    .page-button:disabled {{
+      opacity: .45;
+      cursor: not-allowed;
+    }}
+    .page-size-select {{
+      color: var(--text);
+      background: rgba(255,255,255,.035);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 10px;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 700;
+    }}
+
+    .dashboard-controls {{
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 14px;
+    }}
+    .dashboard-search {{
+      width: 100%;
+      color: var(--text);
+      background: rgba(255,255,255,.035);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 11px 12px;
+      font: inherit;
+      outline: none;
+    }}
+    .dashboard-search:focus {{
+      border-color: rgba(255, 138, 31, .7);
+      box-shadow: 0 0 0 3px rgba(255, 138, 31, .10);
+    }}
+    .quick-filters {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }}
+    .filter-button,
+    .copy-button {{
+      color: var(--muted);
+      background: rgba(255,255,255,.035);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 11px;
+      cursor: pointer;
+      font-family: inherit;
+      font-weight: 700;
+      font-size: 12px;
+    }}
+    .filter-button.active,
+    .filter-button:hover,
+    .copy-button:hover {{
+      color: var(--orange);
+      border-color: rgba(255, 138, 31, .55);
+      background: rgba(255, 138, 31, .10);
+    }}
+    .row-count {{
+      color: var(--muted);
+      font-size: 12px;
+    }}
+    .modal-actions {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 14px;
+    }}
+    .copy-status {{
+      color: var(--green);
+      font-size: 12px;
+      margin-left: 4px;
+      align-self: center;
+    }}
+
     @media (max-width: 900px) {{
-      .grid, .two-col {{ grid-template-columns: 1fr; }}
+      .grid, .two-col, .dashboard-controls, .metadata-grid {{ grid-template-columns: 1fr; }}
+      .quick-filters {{ justify-content: flex-start; }}
       header {{ flex-direction: column; }}
       .meta {{ text-align: left; }}
     }}
@@ -698,8 +1055,40 @@ def build_dashboard_html(
 
       <section class="card section">
         <div class="section-head">
+          <h2>Dashboard Metadata</h2>
+          <span class="chip">schema: <strong>{_safe(schema_label)}</strong></span>
+        </div>
+        <div class="metadata-grid">
+          <div class="metadata-item"><span>generated_at</span><strong>{_safe(generated_at)}</strong></div>
+          <div class="metadata-item"><span>database</span><strong>{_safe(db_path)}</strong></div>
+          <div class="metadata-item"><span>active_filters</span><strong>{_safe(active_filters)}</strong></div>
+          <div class="metadata-item"><span>limit</span><strong>{_safe(limit)}</strong></div>
+          <div class="metadata-item"><span>loaded_runs</span><strong>{_safe(loaded_runs_count)}</strong></div>
+          <div class="metadata-item"><span>loaded_failures</span><strong>{_safe(loaded_failures_count)}</strong></div>
+          <div class="metadata-item"><span>matching_runs</span><strong id="metadata-visible-run-count">{_safe(loaded_runs_count)}</strong></div>
+          <div class="metadata-item"><span>success_rate</span><strong>{_safe(success_rate)}</strong></div>
+        </div>
+      </section>
+
+      <section class="card section">
+        <div class="section-head">
           <h2>Recent Runs</h2>
-          <span class="chip">limit: <strong>{_safe(limit)}</strong></span>
+          <div class="chips">
+            <span class="chip">visible: <strong id="visible-run-count">{_safe(len(runs))}</strong></span>
+            <span class="chip">limit: <strong>{_safe(limit)}</strong></span>
+          </div>
+        </div>
+        <div class="dashboard-controls" aria-label="Dashboard table controls">
+          <input id="dashboard-search" class="dashboard-search" type="search" placeholder="Search runs by id, status, type, agent/team, or task..." />
+          <div class="quick-filters" aria-label="Quick filters">
+            <button class="filter-button active" type="button" data-filter-kind="all" data-filter-value="all">All</button>
+            <button class="filter-button" type="button" data-filter-kind="status" data-filter-value="completed">Completed</button>
+            <button class="filter-button" type="button" data-filter-kind="status" data-filter-value="failed">Failed</button>
+            <button class="filter-button" type="button" data-filter-kind="status" data-filter-value="hold_for_confirmation">Holds</button>
+            <button class="filter-button" type="button" data-filter-kind="type" data-filter-value="tool">Tool</button>
+            <button class="filter-button" type="button" data-filter-kind="type" data-filter-value="agent">Agent</button>
+            <button class="filter-button" type="button" data-filter-kind="type" data-filter-value="team">Team</button>
+          </div>
         </div>
         <table>
           <thead>
@@ -715,8 +1104,29 @@ def build_dashboard_html(
           </thead>
           <tbody>
             {_run_rows(runs)}
+            <tr id="runs-empty-filtered" style="display:none"><td colspan="7" class="dynamic-empty">No runs match the current search or quick filter. Clear the search box or choose All to show loaded runs again.</td></tr>
           </tbody>
         </table>
+        <div class="pagination-controls">
+          <div>
+            <strong id="pagination-range">Showing 0–0 of 0 matching runs</strong>
+            <span class="row-count"> · loaded {_safe(loaded_runs_count)} run(s)</span>
+          </div>
+          <div class="pagination-actions">
+            <label for="page-size-select">Page size</label>
+            <select id="page-size-select" class="page-size-select">
+              <option value="25">25</option>
+              <option value="50" selected>50</option>
+              <option value="100">100</option>
+              <option value="all">All</option>
+            </select>
+            <button class="page-button" type="button" id="page-first">First</button>
+            <button class="page-button" type="button" id="page-prev">Previous</button>
+            <span id="page-label">Page 1 of 1</span>
+            <button class="page-button" type="button" id="page-next">Next</button>
+            <button class="page-button" type="button" id="page-last">Last</button>
+          </div>
+        </div>
       </section>
 
       <section class="card section">
@@ -753,7 +1163,16 @@ def build_dashboard_html(
             </div>
             <button class="modal-close" id="run-detail-modal-close" type="button">Close</button>
           </div>
-          <div class="modal-body" id="run-detail-modal-body"></div>
+          <div class="modal-body">
+            <div class="modal-actions">
+              <button class="copy-button" type="button" data-copy-action="run_id">Copy Run ID</button>
+              <button class="copy-button" type="button" data-copy-action="run_info">Copy run-info command</button>
+              <button class="copy-button" type="button" data-copy-action="trace">Copy trace command</button>
+              <button class="copy-button" type="button" data-copy-action="export">Copy export command</button>
+              <span class="copy-status" id="copy-status" aria-live="polite"></span>
+            </div>
+            <div id="run-detail-modal-body"></div>
+          </div>
         </div>
       </div>
 

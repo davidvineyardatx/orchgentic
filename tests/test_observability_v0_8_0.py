@@ -376,3 +376,91 @@ def test_observability_dashboard_html_export(tmp_path):
     output = write_dashboard_html(html, tmp_path / "dashboard.html")
     assert output.exists()
     assert "orchgentic.observability.dashboard.v1" in output.read_text(encoding="utf-8")
+
+
+def test_observability_dashboard_filters_by_team_and_shows_active_filter(tmp_path):
+    from orchgentic.observability.dashboard import build_dashboard_html
+
+    store = ObservabilityStore(tmp_path / "observability.db")
+
+    team_tracer = TraceCollector(store=store)
+    team_tracer.start_run(run_type="team", task="team task", team_name="ContentTeam")
+    team_tracer.complete_run()
+
+    agent_tracer = TraceCollector(store=store)
+    agent_tracer.start_run(run_type="agent", task="agent task", agent_name="Bob")
+    agent_tracer.complete_run()
+
+    html = build_dashboard_html(store, team="ContentTeam", limit=100)
+    assert "active_filters: team=ContentTeam, limit=100" in html
+    assert "team task" in html
+    assert "agent task" not in html
+    assert "Total Runs" in html
+
+
+def test_dashboard_raw_cli_option_reader(monkeypatch):
+    from orchgentic.cli import _read_raw_cli_option
+
+    monkeypatch.setattr("sys.argv", ["orch", "dashboard", "--team", "ContentTeam", "--type=team"])
+    assert _read_raw_cli_option("--team", "--team-name") == "ContentTeam"
+    assert _read_raw_cli_option("--type") == "team"
+
+
+def test_dashboard_open_option_documented_as_open_existing():
+    from orchgentic.cli import dashboard
+
+    assert dashboard.__doc__ == "Generate a static local observability dashboard HTML file."
+
+
+def test_observability_dashboard_developer_controls(tmp_path):
+    from orchgentic.observability.dashboard import build_dashboard_html
+
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+    run = tracer.start_run(run_type="tool", task="datetime.local {}", agent_id="bob", agent_name="Bob")
+    tracer.complete_run()
+
+    html = build_dashboard_html(store, limit=10)
+    assert "dashboard-search" in html
+    assert "data-filter-kind=\"status\"" in html
+    assert "visible-run-count" in html
+    assert "Copy Run ID" in html
+    assert "Copy run-info command" in html
+    assert "orch run-info" in html
+    assert "orch trace" in html
+    assert "orch export-run" in html
+
+
+def test_observability_dashboard_empty_states_and_metadata(tmp_path):
+    from orchgentic.observability.dashboard import build_dashboard_html
+
+    store = ObservabilityStore(tmp_path / "observability.db")
+    html = build_dashboard_html(store, limit=10)
+
+    assert "Dashboard Metadata" in html
+    assert "orchgentic.observability.v1" in html
+    assert "No runs found. Generate an agent, tool, or team run" in html
+    assert "No failures found. That is a good sign" in html
+    assert "runs-empty-filtered" in html
+    assert "metadata-visible-run-count" in html
+    assert "active_filters" in html
+
+
+def test_observability_dashboard_pagination_controls(tmp_path):
+    from orchgentic.observability.dashboard import build_dashboard_html
+
+    store = ObservabilityStore(tmp_path / "observability.db")
+    for index in range(3):
+        tracer = TraceCollector(store=store)
+        tracer.start_run(run_type="tool", task=f"tool task {index}", agent_id="bob", agent_name="Bob")
+        tracer.complete_run()
+
+    html = build_dashboard_html(store, limit=10)
+    assert "page-size-select" in html
+    assert "pagination-range" in html
+    assert "page-first" in html
+    assert "page-prev" in html
+    assert "page-next" in html
+    assert "page-last" in html
+    assert "Showing 0–0 of 0 matching runs" in html
+    assert "selectedPageSize" in html

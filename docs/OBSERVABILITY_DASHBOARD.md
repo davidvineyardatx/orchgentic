@@ -1,12 +1,17 @@
-# Static Observability Dashboard
+# Observability Dashboard
 
-Orchgentic can generate a local static HTML dashboard from the observability database.
+The Orchgentic observability dashboard is a local, static HTML dashboard generated from the local observability store.
 
-This is the first developer-facing UI for Orchgentic observability. It gives developers a quick visual summary of runs, failures, token usage, estimated token savings, and run-level trace details.
+It is intentionally dependency-free:
 
----
+```text
+no server
+no hosted service
+no frontend build
+no external dashboard dependency
+```
 
-## Generate Dashboard
+## Generate a Dashboard
 
 ```bash
 orch dashboard
@@ -18,148 +23,151 @@ Default output:
 exports/orchgentic_observability_dashboard.html
 ```
 
-The dashboard header displays:
-
-```text
-RUN DASHBOARD
-```
-
-Subtitle:
-
-```text
-Summary of runs, failures, token usage, and estimated savings.
-```
-
----
-
-## Open in Browser
+## Open Existing Dashboard
 
 ```bash
 orch dashboard --open
 ```
 
----
+`--open` opens the existing dashboard file. It does **not** regenerate the dashboard.
 
-## Custom Output Path
+This prevents accidental loss of filters.
 
-```bash
-orch dashboard --output exports/dashboard.html
-```
+## Filtered Dashboard Workflow
 
----
-
-## Filter Dashboard Data
+Generate a filtered dashboard:
 
 ```bash
-orch dashboard --limit 50
-orch dashboard --status completed
-orch dashboard --status failed
-orch dashboard --type tool
-orch dashboard --type agent
-orch dashboard --type team
-orch dashboard --agent Bob
 orch dashboard --team ContentTeam
 ```
 
----
+Open that exact generated file:
 
-## Dashboard Includes
-
-```text
-total runs
-failure count
-total tokens
-estimated tokens saved
-run breakdown by status
-run breakdown by type
-failure breakdown by error type
-recent runs
-recent failures
-clickable Run IDs
-modal run detail views
-trace event timelines
+```bash
+orch dashboard --open
 ```
 
----
+Other filters:
 
-## Clickable Run IDs
-
-Run IDs in the dashboard are clickable.
-
-Clicking a Run ID jumps to an modal detail view for that run.
-
-Each link and target are generated together:
-
-```text
-href="#run-<full_run_id>"
-id="run-<full_run_id>"
+```bash
+orch dashboard --agent Bob
+orch dashboard --type tool
+orch dashboard --status completed
 ```
 
-Each run detail section includes:
+Supported aliases:
+
+```bash
+orch dashboard --agent-name Bob
+orch dashboard --team-name ContentTeam
+```
+
+## Loaded Runs and Pagination
+
+The dashboard is a static snapshot. `--limit` controls how many recent runs are loaded into the HTML file:
+
+```bash
+orch dashboard --limit 500
+```
+
+The browser then paginates the loaded rows.
+
+Dashboard pagination controls:
 
 ```text
-run metadata
+Page size: 25 / 50 / 100 / All
+First
+Previous
+Next
+Last
+Showing X–Y of Z matching runs
+```
+
+Pagination works with search and quick filters.
+
+## Search and Quick Filters
+
+The dashboard includes client-side search over:
+
+```text
+run id
+status
+type
+agent/team
 task
-token summary
-trace events
-event messages
 ```
 
-Use `Close`, click outside the modal, or press `Esc` to return to the dashboard summary.
+Quick filters:
 
----
-
-## When to Use CLI vs Dashboard
-
-Use the dashboard for a fast visual overview.
-
-Use the CLI for deeper inspection:
-
-```bash
-orch run-info <run_id>
-orch trace <run_id>
-orch failures
-orch export-run <run_id>
-orch export-runs --limit 100 --output exports/runs.jsonl
+```text
+All
+Completed
+Failed
+Holds
+Tool
+Agent
+Team
 ```
-
----
-
-## Related Commands
-
-```bash
-orch runs
-orch run-info <run_id>
-orch trace <run_id>
-orch runs-stats
-orch failures
-orch dashboard
-```
-
----
-
-## Notes
-
-- The dashboard is a static HTML file.
-- No server is required.
-- No frontend build step is required.
-- It reads local observability data only.
-- The dashboard schema label is `orchgentic.observability.dashboard.v1`.
-
----
 
 ## Modal Run Details
 
-Run details open in a modal window.
+Click a Run ID to open a modal with run details and trace events.
 
-When a Run ID is selected:
+The modal can be closed with:
 
 ```text
-a modal opens
-run metadata is shown
-task details are shown
-trace events are shown
-the dashboard remains in place behind the modal
+Close button
+Esc key
+click outside the modal
 ```
 
-Close the modal by selecting `Close`, clicking outside the modal, or pressing `Esc`.
+## Copy Buttons
+
+The run detail modal includes copy buttons for:
+
+```text
+Copy Run ID
+Copy run-info command
+Copy trace command
+Copy export command
+```
+
+Generated commands look like:
+
+```bash
+orch run-info <run_id>
+orch trace <run_id>
+orch export-run <run_id> --output exports/run-<short_id>.json
+```
+
+## Empty States
+
+The dashboard distinguishes:
+
+```text
+no runs loaded
+no failed runs
+no runs matching current search/filter
+```
+
+## Metadata Panel
+
+The dashboard metadata panel shows:
+
+```text
+generated_at
+database path
+active filters
+limit
+loaded runs
+loaded failures
+matching/visible runs
+success rate
+schema label
+```
+
+Schema label:
+
+```text
+orchgentic.observability.v1
+```

@@ -1,6 +1,6 @@
 ## Observability
 
-Orchgentic includes a native observability foundation for inspecting and explaining agent, tool, and team runs.
+Orchgentic includes native observability for runs, trace events, token usage, estimated token savings, failures, exports, and a local static dashboard.
 
 Common commands:
 
@@ -8,29 +8,43 @@ Common commands:
 orch runs
 orch run-info <run_id>
 orch trace <run_id>
-orch failures
-orch runs-stats
+orch export-run <run_id>
+orch export-runs --limit 100 --output exports/runs.jsonl
+```
+
+Generate a dashboard:
+
+```bash
 orch dashboard
 ```
 
-Generate the local dashboard:
+Open the existing dashboard without regenerating:
 
 ```bash
 orch dashboard --open
 ```
 
-The dashboard includes run summaries, failures, token usage, estimated token savings, clickable Run IDs, modal run details, and trace event timelines.
-
-Exports are available for external dashboards:
+Generate a filtered dashboard and then open it:
 
 ```bash
-orch export-run <run_id>
-orch export-runs --limit 100 --output exports/runs.jsonl
+orch dashboard --team ContentTeam
+orch dashboard --open
 ```
 
-Schema labels:
+Dashboard features:
+
+```text
+search
+quick filters
+client-side pagination
+modal run details
+copy CLI commands
+empty states
+metadata panel
+```
+
+Schema:
 
 ```text
 orchgentic.observability.v1
-orchgentic.observability.dashboard.v1
 ```

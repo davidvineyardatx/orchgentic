@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import json
 import re
+import sys
 import typer
 import uvicorn
 import webbrowser
@@ -659,30 +660,90 @@ def export_runs(
 
 
 
+def _read_raw_cli_option(*names: str) -> str | None:
+    args = sys.argv[1:]
+    for index, item in enumerate(args):
+        for name in names:
+            if item == name and index + 1 < len(args):
+                candidate = args[index + 1]
+                if not candidate.startswith("-"):
+                    return candidate
+            prefix = name + "="
+            if item.startswith(prefix):
+                return item[len(prefix):]
+    return None
+
+
+def _format_dashboard_filters(**filters) -> str:
+    active = {key: value for key, value in filters.items() if value not in {None, "", False}}
+    if not active:
+        return ""
+    return " (" + ", ".join(f"{key}={value}" for key, value in active.items()) + ")"
+
+
 @app.command("dashboard")
 def dashboard(
     output: Path = typer.Option(DEFAULT_DASHBOARD_PATH, "--output", "-o", help="Path to write the static HTML dashboard."),
     limit: int = typer.Option(100, "--limit", help="Number of recent runs to include."),
-    status: str = typer.Option(None, "--status", help="Optional status filter."),
-    run_type: str = typer.Option(None, "--type", help="Optional run type filter, such as agent, team, or tool."),
-    agent: str = typer.Option(None, "--agent", help="Optional agent name or id filter."),
-    team: str = typer.Option(None, "--team", help="Optional team name or id filter."),
-    open_browser: bool = typer.Option(False, "--open", help="Open the generated dashboard in the default browser."),
+    status_filter: str = typer.Option(None, "--status", help="Optional status filter."),
+    run_type_filter: str = typer.Option(None, "--type", help="Optional run type filter, such as agent, team, or tool."),
+    agent_filter: str = typer.Option(None, "--agent", "--agent-name", help="Optional agent name or id filter."),
+    team_filter: str = typer.Option(None, "--team", "--team-name", help="Optional team name or id filter."),
+    open_browser: bool = typer.Option(False, "--open", help="Open the existing dashboard file without regenerating it."),
 ):
     """Generate a static local observability dashboard HTML file."""
+    # Defensive fallback: in some installed console-script contexts, custom Typer
+    # aliases can appear not to bind even though they are present in sys.argv.
+    # Read the raw argv value as a backup so dashboard filters always apply.
+    status_value = status_filter or _read_raw_cli_option("--status")
+    run_type_value = run_type_filter or _read_raw_cli_option("--type")
+    agent_value = agent_filter or _read_raw_cli_option("--agent", "--agent-name")
+    team_value = team_filter or _read_raw_cli_option("--team", "--team-name")
+
+    path = Path(output)
+
+    if open_browser:
+        if not path.exists():
+            typer.echo(f"Dashboard file not found: {path}")
+            typer.echo("Run `orch dashboard` first to generate it.")
+            raise typer.Exit(1)
+
+        ignored_filters = _format_dashboard_filters(
+            limit=None,
+            status=status_value,
+            type=run_type_value,
+            agent=agent_value,
+            team=team_value,
+        )
+        if ignored_filters:
+            typer.echo("--open opens the existing dashboard file and does not regenerate it.")
+            typer.echo(f"Ignored generation filters: {ignored_filters.strip()[1:-1]}")
+
+        webbrowser.open(path.resolve().as_uri())
+        typer.echo(f"Opened existing observability dashboard: {path}")
+        return
+
     store = ObservabilityStore()
     html = build_dashboard_html(
         store,
         limit=limit,
-        status=status,
-        run_type=run_type,
-        agent=agent,
-        team=team,
+        status=status_value,
+        run_type=run_type_value,
+        agent=agent_value,
+        team=team_value,
     )
-    path = write_dashboard_html(html, output)
-    typer.echo(f"Generated observability dashboard: {path}")
-    if open_browser:
-        webbrowser.open(path.resolve().as_uri())
+    path = write_dashboard_html(html, path)
+    typer.echo(
+        "Generated observability dashboard: "
+        f"{path}"
+        + _format_dashboard_filters(
+            limit=limit,
+            status=status_value,
+            type=run_type_value,
+            agent=agent_value,
+            team=team_value,
+        )
+    )
 
 @app.command("failures")
 def failures(
