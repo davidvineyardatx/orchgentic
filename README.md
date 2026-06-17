@@ -1,52 +1,90 @@
 # Orchgentic
 
-Orchgentic is an open-source, local-first agent orchestration framework for building, routing, coordinating, observing, and optimizing AI agents across tools, memory, knowledge, workflows, events, policies, providers, and teams.
+**Orchgentic** is an open-source, local-first AI agent orchestration framework for building, routing, coordinating, observing, and optimizing agents across tools, memory, knowledge, workflows, events, policies, providers, and teams.
 
-Orchgentic is designed around a YAML-first operational architecture so agents, teams, tools, routing behavior, memory, knowledge, safety policies, observability, and token usage can be configured clearly and inspected easily.
-
-## Current Status
-
-**Developer Preview — v0.8.0-beta.3**
-
-The current release line focuses on observability, token intelligence, clean runtime inspection, and proving when Orchgentic avoids unnecessary external LLM usage.
-
-v0.8.0-beta.3 introduces the Token Intelligence layer:
-
-* `orch token-report`
-* local vs external LLM run summaries
-* direct tool bypass metrics
-* deterministic route metrics
-* estimated token savings summaries
-* proof events for local/direct execution
-* Token Intelligence dashboard section
-* token-scoped Run ID modal
-* dashboard title polish
-
-The goal is simple:
+Orchgentic is designed around a YAML-first operational architecture so agent behavior, tools, policies, routing, observability, and token usage can be configured, versioned, inspected, and trusted.
 
 > Stop letting agents become black boxes that eat tokens in the dark.
 
-Orchgentic helps prove when an agent had a provider configured, avoided the LLM, ran locally or directly, spent zero external LLM tokens, and recorded the proof in the trace.
+---
+
+## Current Release
+
+**Developer Preview — v0.8.0-beta.3**
+
+Current focus:
+
+```text
+Token Intelligence and Local Reasoning Proof
+```
+
+v0.8.0-beta.3 introduces Orchgentic’s Token Intelligence layer:
+
+- `orch token-report`
+- local vs external LLM run summaries
+- direct tool bypass metrics
+- deterministic route metrics
+- estimated token savings summaries
+- proof events for local/direct execution
+- Token Intelligence dashboard section
+- token-scoped Run ID modal
+- dashboard title polish
+
+The core proof story:
+
+```text
+The agent had a provider configured.
+Orchgentic avoided the LLM.
+The task ran locally or directly.
+Zero external LLM tokens were spent.
+The estimated savings were recorded in the trace.
+```
 
 ---
 
-## Core Positioning
+## What Orchgentic Is
 
 Orchgentic is not just an agent runner.
 
 It is a local-first AI operations layer that helps determine:
 
-* which agent should handle a task
-* whether a tool should be used
-* whether memory or knowledge should be searched
-* whether the task can be handled locally
-* whether an external LLM should be called
-* whether policy allows the action
-* whether human confirmation is required
-* how many tokens were used or estimated to be saved
-* how the run should be inspected afterward
+- which agent should handle a task
+- whether a tool should be used
+- whether memory or knowledge should be searched
+- whether the task can be handled locally
+- whether an external LLM should be called
+- whether a workflow or team should be used
+- whether policy allows the action
+- whether human confirmation is required
+- how many tokens were used or estimated to be saved
+- how the run should be inspected afterward
 
 Orchgentic is built for developers and technical teams who need agents, tools, teams, workflows, policies, memory, knowledge, providers, and observability to work together under clear, version-controlled contracts.
+
+---
+
+## Why Orchgentic Exists
+
+AI agents are powerful, but they can easily become black boxes that spend tokens just to figure out:
+
+- what role they are supposed to play
+- which tools they have
+- which provider they should use
+- what policies apply
+- what context is available
+- whether memory or knowledge is needed
+- whether the task even requires an LLM
+
+Orchgentic helps make agent systems:
+
+- observable
+- token-aware
+- policy-safe
+- locally efficient
+- provider-flexible
+- workflow-ready
+- easier to debug
+- easier to trust
 
 ---
 
@@ -54,56 +92,79 @@ Orchgentic is built for developers and technical teams who need agents, tools, t
 
 Current capabilities include:
 
-* YAML-based agent configuration
-* pluggable provider configuration
-* tool registry and tool execution
-* memory support
-* knowledge search support
-* planning and reflection
-* local reasoning
-* confidence scoring
-* deterministic tool routing
-* workflow-aware routing
-* event-aware routing
-* policy-aware escalation
-* Gmail tool policies
-* confirmation-required tool execution
-* disabled-tool blocking
-* multi-agent team orchestration
-* team handoff compression
-* structured output unwrapping
-* team synthesis guardrails
-* observability store
-* run history
-* trace events
-* run inspection
-* trace inspection
-* export commands
-* static local dashboard
-* dashboard search, filters, pagination, and modals
-* Token Intelligence reporting
-* estimated token savings tracking
-* local execution proof events
-* observability doctor command
-* clean test data / release cleanup command
+- YAML-based agent configuration
+- pluggable provider configuration
+- tool registry and tool execution
+- memory support
+- knowledge search support
+- planning and reflection
+- local reasoning
+- confidence scoring
+- deterministic tool routing
+- workflow-aware routing
+- event-aware routing
+- policy-aware escalation
+- Gmail tool policies
+- confirmation-required tool execution
+- disabled-tool blocking
+- multi-agent team orchestration
+- team handoff compression
+- structured output unwrapping
+- team synthesis guardrails
+- observability store
+- run history
+- trace events
+- run inspection
+- trace inspection
+- export commands
+- static local dashboard
+- dashboard search, filters, pagination, and modals
+- Token Intelligence reporting
+- estimated token savings tracking
+- local execution proof events
+- observability doctor command
+- clean test data / release cleanup command
 
 ---
 
-## Installation
+## Quick Install
 
-From the project root:
+Clone the repository:
+
+```bash
+git clone https://github.com/davidvineyardatx/orchgentic.git
+cd orchgentic
+```
+
+Create and activate a virtual environment.
+
+Git Bash / Windows:
+
+```bash
+python -m venv .venv
+source .venv/Scripts/activate
+```
+
+PowerShell:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+Install Orchgentic in editable mode:
 
 ```bash
 pip install -e .
 ```
 
-Initialize the Orchgentic workspace:
+Initialize the workspace:
 
 ```bash
 orch init
 ```
 
-Then verify the CLI:
+Verify the CLI:
 
 ```bash
 orch --help
@@ -111,9 +172,27 @@ orch --help
 
 ---
 
-## Quick Start
+## First Run
 
-Run a low-risk deterministic tool through an agent:
+List available agents:
+
+```bash
+orch list-agents
+```
+
+List available tools:
+
+```bash
+orch list-tools
+```
+
+Run Bob:
+
+```bash
+orch run Bob
+```
+
+Run a deterministic tool through Bob:
 
 ```bash
 orch tool run datetime.local --agent Bob
@@ -137,45 +216,22 @@ Inspect trace events:
 orch trace <run_id>
 ```
 
-Generate a Token Intelligence report:
-
-```bash
-orch token-report
-```
-
-Generate the dashboard:
-
-```bash
-orch dashboard
-```
-
-Open the existing dashboard:
-
-```bash
-orch dashboard --open
-```
-
 ---
 
-## Token Intelligence
+## Token Intelligence Demo
 
-Token Intelligence is Orchgentic’s proof layer for local execution and estimated token savings.
+The fastest way to see the Orchgentic token-savings story is to run a deterministic tool and then inspect the Token Intelligence report.
 
-Use:
+Run:
+
+```bash
+orch tool run datetime.local --agent Bob
+```
+
+Then:
 
 ```bash
 orch token-report
-```
-
-Filter reports:
-
-```bash
-orch token-report --status completed
-orch token-report --type tool
-orch token-report --agent Bob
-orch token-report --team ContentTeam
-orch token-report --limit 500
-orch token-report --json
 ```
 
 Example output:
@@ -202,42 +258,26 @@ Example proof event:
 routing.bypassed (routing/direct_tool) saved≈349, source=estimated - Direct tool execution bypassed LLM routing.
 ```
 
-This proves that Orchgentic avoided an unnecessary external LLM call for a deterministic direct-tool path.
-
----
-
-## Observability
-
-The v0.8.0 observability foundation includes:
-
-* run history
-* trace inspection
-* exports
-* failure diagnostics
-* retention cleanup
-* local static dashboard
-* dashboard pagination
-* observability doctor
-* Token Intelligence reporting
-
-Schema:
+This demonstrates:
 
 ```text
-orchgentic.observability.v1
+Bob has a provider configured.
+The task did not need the provider.
+Orchgentic bypassed LLM routing.
+The tool ran directly.
+The run spent 0 external LLM tokens.
+The estimated savings were recorded and can be inspected.
 ```
 
-Useful commands:
+Filter token reports:
 
 ```bash
-orch runs
-orch run-info <run_id>
-orch trace <run_id>
-orch failures
-orch export-run <run_id>
-orch export-runs
-orch runs-stats
-orch doctor observability
-orch token-report
+orch token-report --status completed
+orch token-report --type tool
+orch token-report --agent Bob
+orch token-report --team ContentTeam
+orch token-report --limit 500
+orch token-report --json
 ```
 
 ---
@@ -271,18 +311,48 @@ orch dashboard --limit 500
 
 Dashboard features include:
 
-* search
-* quick filters
-* client-side pagination
-* modal run details
-* Token Intelligence section
-* token-scoped Run ID modal
-* copy commands
-* empty states
-* generated metadata panel
-* local static HTML output
+- run summaries
+- failure summaries
+- search
+- quick filters
+- client-side pagination
+- modal run details
+- Token Intelligence section
+- token-scoped Run ID modal
+- copy commands
+- empty states
+- generated metadata panel
+- local static HTML output
 
 The dashboard is local and does not require a hosted service.
+
+---
+
+## Observability Commands
+
+Orchgentic records run and trace data locally.
+
+Schema:
+
+```text
+orchgentic.observability.v1
+```
+
+Useful commands:
+
+| Command | Purpose |
+|---|---|
+| `orch runs` | List recorded runs |
+| `orch run-info <run_id>` | Inspect a run and its trace |
+| `orch trace <run_id>` | Inspect trace events |
+| `orch failures` | Show failed runs |
+| `orch export-run <run_id>` | Export one run as JSON |
+| `orch export-runs` | Export multiple runs as JSONL |
+| `orch runs-stats` | Show observability stats |
+| `orch doctor observability` | Check observability health |
+| `orch token-report` | Show token intelligence summary |
+| `orch dashboard` | Generate dashboard |
+| `orch clean-testdata` | Preview cleanup of generated data |
 
 ---
 
@@ -302,14 +372,14 @@ orch doctor observability --json
 
 The doctor reports:
 
-* schema version
-* store status
-* run count
-* event count
-* dashboard output path
-* directory health
-* estimated tokens saved
-* next steps
+- schema version
+- store status
+- run count
+- event count
+- dashboard output path
+- directory health
+- estimated tokens saved
+- next steps
 
 Example states:
 
@@ -359,6 +429,32 @@ external_llm_used: False
 provider used: N/A — no LLM used
 configured provider: groq / llama-3.3-70b-versatile
 ```
+
+---
+
+## Provider Setup
+
+Agents only need valid provider configuration when a run actually escalates to an external LLM.
+
+For Groq:
+
+```env
+GROQ_API_KEY=your_groq_api_key
+```
+
+For OpenAI:
+
+```env
+OPENAI_API_KEY=your_openai_api_key
+```
+
+For local OpenAI-compatible runtimes such as LM Studio:
+
+```env
+LM_STUDIO_BASE_URL=http://localhost:1234/v1
+```
+
+Direct tool runs, deterministic routes, and some local reasoning paths may avoid external LLM calls entirely.
 
 ---
 
@@ -449,22 +545,22 @@ orch clean-testdata --no-dry-run --confirm
 
 The cleanup command removes generated artifacts such as:
 
-* `logs/`
-* `exports/`
-* `memory/`
-* `.pytest_cache/`
-* `__pycache__/`
-* `*.pyc`
+- `logs/`
+- `exports/`
+- `memory/`
+- `.pytest_cache/`
+- `__pycache__/`
+- `*.pyc`
 
 It preserves:
 
-* `agents/`
-* `teams/`
-* `triggers/`
-* `docs/`
-* `.env`
-* provider credentials
-* source code
+- `agents/`
+- `teams/`
+- `triggers/`
+- `docs/`
+- `.env`
+- provider credentials
+- source code
 
 ---
 
@@ -533,23 +629,41 @@ Recommended reading order:
 
 ---
 
+## What Is Not Stable Yet
+
+Orchgentic is still in developer preview.
+
+The current release does not yet claim:
+
+- hosted dashboard
+- hosted SaaS control plane
+- full no-code builder
+- stable workflow YAML contract
+- stable plugin marketplace
+- enterprise RBAC
+- distributed workers
+
+These are future directions. The current focus is building a stable local-first runtime with observable, token-aware execution.
+
+---
+
 ## Roadmap Direction
 
 Near-term priorities include:
 
-* Token Intelligence polish
-* local reasoning proof
-* runtime hardening and error consistency
-* configuration contract freeze
-* tool/plugin contract stabilization
-* workflow execution foundation
-* RAG, memory, and knowledge stabilization
-* provider and local LLM stabilization
-* SDK foundation
-* local API foundation
-* dashboard/workbench improvements
-* builder-ready contracts
-* stable v1.0 release
+- Token Intelligence polish
+- local reasoning proof
+- runtime hardening and error consistency
+- configuration contract freeze
+- tool/plugin contract stabilization
+- workflow execution foundation
+- RAG, memory, and knowledge stabilization
+- provider and local LLM stabilization
+- SDK foundation
+- local API foundation
+- dashboard/workbench improvements
+- builder-ready contracts
+- stable v1.0 release
 
 For v1.0, Orchgentic should be:
 
@@ -572,21 +686,21 @@ The long-term vision for Orchgentic is to become a unified orchestration runtime
 
 Orchgentic is being built to support:
 
-* multi-agent coordination
-* tool-using agents
-* policy-governed execution
-* autonomous workflows
-* memory and knowledge retrieval
-* RAG
-* local LLMs
-* local reasoning
-* provider escalation
-* human confirmation
-* runtime observability
-* Token Intelligence
-* dashboard-driven operations
-* SDK and API access
-* eventually, no-code orchestration
+- multi-agent coordination
+- tool-using agents
+- policy-governed execution
+- autonomous workflows
+- memory and knowledge retrieval
+- RAG
+- local LLMs
+- local reasoning
+- provider escalation
+- human confirmation
+- runtime observability
+- Token Intelligence
+- dashboard-driven operations
+- SDK and API access
+- eventually, no-code orchestration
 
 The autonomous AI era is only beginning.
 
