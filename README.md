@@ -97,6 +97,12 @@ From the project root:
 pip install -e .
 ```
 
+Initialize the Orchgentic workspace:
+
+```bash
+orch init
+```
+
 Then verify the CLI:
 
 ```bash
