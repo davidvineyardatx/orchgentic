@@ -119,3 +119,33 @@ runs: 0
 events: 0
 hint: Run `orch run Bob` or `orch tool run datetime.local --agent Bob` to create trace data.
 ```
+
+## Token intelligence example
+
+```bash
+orch tool run datetime.local --agent Bob
+orch token-report
+orch trace <run_id> --tokens
+```
+
+Expected proof event:
+
+```text
+routing.bypassed (routing/direct_tool) saved≈349, source=estimated - Direct tool execution bypassed LLM routing.
+```
+
+## Inspect token proof from the dashboard
+
+```bash
+orch tool run datetime.local --agent Bob
+orch dashboard --limit 500
+orch dashboard --open
+```
+
+In the dashboard:
+
+1. Open the Token Intelligence section.
+2. Click the Run ID in the proof events table.
+3. Review the token-only modal for that specific run.
+
+The modal shows token fields such as `external_llm_used`, `local_execution`, `total_tokens`, `estimated_tokens_saved`, `token_source`, and token proof events.

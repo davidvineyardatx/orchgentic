@@ -193,3 +193,16 @@ orch dashboard --open
 ```
 
 `orch doctor observability` reports store, dashboard, exports directory, run count, event count, and actionable next steps. `orch dashboard` can generate a zero-run dashboard with first-run guidance. `orch dashboard --open` opens an existing dashboard only and tells the user to generate one first when the file is missing.
+
+## Token intelligence and local reasoning proof
+
+Orchgentic includes token intelligence reporting so teams can see when runs stayed local, when external LLMs were used, and which trace events prove estimated token savings.
+
+Use:
+
+```bash
+orch token-report
+orch token-report --json
+```
+
+The report highlights `routing.bypassed`, `routing.completed`, `reasoning.completed`, and `llm.*` events. This helps prove that deterministic routing, direct tool execution, and local reasoning avoided unnecessary LLM usage.

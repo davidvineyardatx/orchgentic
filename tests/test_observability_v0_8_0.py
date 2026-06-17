@@ -360,7 +360,8 @@ def test_observability_dashboard_html_export(tmp_path):
 
     html = build_dashboard_html(store, limit=10)
     assert "Orchgentic Observability" in html
-    assert "RUN DASHBOARD" in html
+    assert "DASHBOARD" in html
+    assert "RUN DASHBOARD" not in html
     assert "datetime.local" in html
     assert "saved≈349" in html
     assert "Run Details:" in html
@@ -772,3 +773,151 @@ def test_clean_testdata_json_includes_release_cleanup_commands(tmp_path):
     assert "Git Bash:" in text
     assert "PowerShell:" in text
     assert "last command before `git status`" in text
+
+
+def test_token_intelligence_report_proves_direct_tool_savings(tmp_path):
+    from orchgentic.observability.token_intelligence import build_token_intelligence_report, format_token_intelligence_report
+
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+    run = tracer.start_run(
+        run_type="tool",
+        task="datetime.local {}",
+        agent_id="bob",
+        agent_name="Bob",
+        provider="groq",
+        model="llama-3.3-70b-versatile",
+    )
+    tracer.event(
+        "routing.bypassed",
+        component="routing",
+        name="direct_tool",
+        estimated_tokens_saved=349,
+        token_source="estimated",
+        message="Direct tool execution bypassed LLM routing.",
+        data={"savings_reason": "direct_tool_execution_bypassed_llm_routing"},
+    )
+    tracer.event("policy.checked", component="policy", name="allow", status="allow")
+    tracer.complete_run()
+
+    report = build_token_intelligence_report(store, limit=10, status="completed", run_type="tool", agent="Bob")
+    assert report["loaded_runs"] == 1
+    assert report["filters"]["status"] == "completed"
+    assert report["filters"]["run_type"] == "tool"
+    assert report["filters"]["agent"] == "Bob"
+    assert report["has_runs"] is True
+    assert report["has_savings"] is True
+    assert "status=completed" in report["filter_summary"]
+    assert "type=tool" in report["filter_summary"]
+    assert report["local_runs"] == 1
+    assert report["external_llm_runs"] == 0
+    assert report["direct_tool_runs"] == 1
+    assert report["direct_bypasses"] == 1
+    assert report["estimated_tokens_saved"] == 349
+    assert report["top_savings_run"]["run_short_id"] == run.run_id[:8]
+    assert report["proof_events"][0]["event_type"] == "routing.bypassed"
+    assert "not billing claims" in report["token_source_note"]
+
+    text = format_token_intelligence_report(report)
+    assert "TOKEN INTELLIGENCE" in text
+    assert "local_runs: 1 (100.0%)" in text
+    assert "estimated_tokens_saved: 349" in text
+    assert "Direct tool execution bypassed LLM routing" in text
+
+
+def test_token_intelligence_report_tracks_external_llm_usage(tmp_path):
+    from orchgentic.observability.token_intelligence import build_token_intelligence_report
+
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+    tracer.start_run(run_type="agent", task="write a summary", agent_id="bob", agent_name="Bob")
+    tracer.event("llm.started", component="provider", name="groq", status="started")
+    tracer.event("llm.completed", component="provider", name="groq", input_tokens=100, output_tokens=25, token_source="estimated")
+    tracer.complete_run()
+
+    report = build_token_intelligence_report(store, limit=10)
+    assert report["loaded_runs"] == 1
+    assert report["local_runs"] == 0
+    assert report["external_llm_runs"] == 1
+    assert report["llm_events"] == 2
+    assert report["total_tokens"] == 125
+    assert report["proof_events"][0]["event_type"] in {"llm.completed", "llm.started"}
+
+
+def test_dashboard_includes_token_intelligence_section(tmp_path):
+    from orchgentic.observability.dashboard import build_dashboard_html
+
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+    tracer.start_run(run_type="tool", task="datetime.local {}", agent_id="bob", agent_name="Bob")
+    tracer.event("routing.bypassed", component="routing", name="direct_tool", estimated_tokens_saved=349, token_source="estimated")
+    tracer.complete_run()
+
+    html = build_dashboard_html(store, limit=10)
+    assert "Token Intelligence" in html
+    assert "local reasoning proof" in html
+    assert "local_runs" in html
+    assert "direct_bypasses" in html
+    assert "estimated_tokens_saved" in html
+    assert "not billing claims" in html
+
+
+def test_dashboard_token_intelligence_run_id_opens_token_only_modal(tmp_path):
+    from orchgentic.observability.dashboard import build_dashboard_html
+
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+    run = tracer.start_run(
+        run_type="tool",
+        task="datetime.local {}",
+        agent_id="bob",
+        agent_name="Bob",
+        provider="groq",
+        model="llama-3.3-70b-versatile",
+    )
+    tracer.event(
+        "routing.bypassed",
+        component="routing",
+        name="direct_tool",
+        estimated_tokens_saved=349,
+        token_source="estimated",
+        message="Direct tool execution bypassed LLM routing.",
+    )
+    tracer.complete_run()
+
+    html = build_dashboard_html(store, limit=10)
+    token_target = f"token-run-{run.run_id}"
+
+    assert "data-token-run-target" in html
+    assert token_target in html
+    assert "function openTokenModal" in html
+    assert "Token Details:" in html
+    assert "tokenDetails" in html
+    assert "input_tokens" in html
+    assert "output_tokens" in html
+    assert "total_tokens" in html
+    assert "estimated_tokens_saved" in html
+    assert "external_llm_used" in html
+    assert "local_execution" in html
+    assert "token_proof_events" in html
+    assert "No token proof events found for this run" in html or "routing.bypassed" in html
+
+
+def test_dashboard_token_intelligence_respects_status_filter(tmp_path):
+    from orchgentic.observability.dashboard import build_dashboard_html
+
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+    tracer.start_run(run_type="tool", task="datetime.local {}", agent_id="bob", agent_name="Bob")
+    tracer.event("routing.bypassed", component="routing", name="direct_tool", estimated_tokens_saved=349, token_source="estimated")
+    tracer.complete_run(status="completed")
+
+    tracer.start_run(run_type="agent", task="failed task", agent_id="bob", agent_name="Bob")
+    tracer.event("llm.started", component="provider", name="groq")
+    tracer.complete_run(status="failed")
+
+    html = build_dashboard_html(store, limit=10, status="completed")
+    assert "Token Intelligence" in html
+    assert "estimated_tokens_saved" in html
+    assert "saved≈349" in html
+    assert "failed task" not in html

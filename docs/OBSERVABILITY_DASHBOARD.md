@@ -200,3 +200,31 @@ orch dashboard --open
 ```
 
 `orch dashboard --open` intentionally opens the existing dashboard file without regenerating it. If the dashboard file is missing, run `orch dashboard` first.
+
+## Token Intelligence section
+
+The dashboard includes a Token Intelligence section with local runs, external LLM runs, direct bypasses, deterministic routes, local reasoning events, LLM events, estimated tokens saved, top savings run, and proof events.
+
+This section is designed to support the token-aware operations story: Orchgentic can show when LLM usage was avoided and which trace event proves the estimated savings.
+
+## Token Intelligence modal
+
+In the Token Intelligence section, clicking a Run ID opens a focused token-only modal for that run.
+
+The modal is designed to answer:
+
+```text
+Did this run use an external LLM?
+Was it executed locally?
+How many tokens were reported?
+How many tokens were estimated as saved?
+What token source was used?
+Which proof events support the token story?
+```
+
+For full run inspection, use the regular Run ID links in the Recent Runs or Recent Failures sections.
+
+
+## Dashboard title polish
+
+The main dashboard title is now `DASHBOARD` so the page reads as the overall Orchgentic observability dashboard rather than only a run dashboard.

@@ -56,6 +56,10 @@ from orchgentic.observability.dashboard import (
     build_dashboard_html,
     write_dashboard_html,
 )
+from orchgentic.observability.token_intelligence import (
+    build_token_intelligence_report,
+    format_token_intelligence_report,
+)
 
 app = typer.Typer()
 connect_app = typer.Typer(help="Connect external accounts.")
@@ -147,7 +151,13 @@ def _format_stats(stats: dict) -> str:
     if filters:
         lines.append("filters: " + ", ".join(f"{k}={v}" for k, v in filters.items()))
     lines.append(f"total_runs: {stats.get('total_runs', 0)}")
-    lines.append(f"external_llm_runs: {stats.get('external_llm_runs', 0)}")
+    external_llm_runs = int(stats.get('external_llm_runs', 0) or 0)
+    total_runs = int(stats.get('total_runs', 0) or 0)
+    local_runs = max(total_runs - external_llm_runs, 0)
+    local_rate = f"{round((local_runs / total_runs) * 100, 1)}%" if total_runs else "0%"
+    lines.append(f"external_llm_runs: {external_llm_runs}")
+    lines.append(f"local_runs: {local_runs}")
+    lines.append(f"local_run_rate: {local_rate}")
     lines.append(f"total_tokens: {stats.get('total_tokens', 0)}")
     lines.append(f"input_tokens: {stats.get('input_tokens', 0)}")
     lines.append(f"output_tokens: {stats.get('output_tokens', 0)}")
@@ -1167,6 +1177,28 @@ def clean_testdata(
         typer.echo(json.dumps(payload, indent=2, sort_keys=True, default=str))
     else:
         typer.echo(_format_clean_testdata_result(payload, verbose=verbose))
+
+@app.command("token-report")
+def token_report(
+    limit: int = typer.Option(100, "--limit", help="Number of recent runs to analyze."),
+    status: str = typer.Option(None, "--status", help="Optional run status filter, such as completed or failed."),
+    run_type: str = typer.Option(None, "--type", help="Optional run type filter, such as agent, team, or tool."),
+    agent: str = typer.Option(None, "--agent", help="Optional agent name or id filter."),
+    team: str = typer.Option(None, "--team", help="Optional team name or id filter."),
+    json_output: bool = typer.Option(False, "--json", help="Output token intelligence as JSON."),
+):
+    """Show local reasoning, LLM usage, and estimated token-savings proof."""
+    store = ObservabilityStore()
+    report = build_token_intelligence_report(
+        store,
+        limit=limit,
+        status=status,
+        run_type=run_type,
+        agent=agent,
+        team=team,
+    )
+    typer.echo(json.dumps(report, indent=2, sort_keys=True, default=str) if json_output else format_token_intelligence_report(report))
+
 
 @app.command("runs-stats")
 def runs_stats(

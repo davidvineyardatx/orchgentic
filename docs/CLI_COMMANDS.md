@@ -313,3 +313,16 @@ git status
 ```
 
 After this final cleanup, avoid running `pytest`, `python`, or `orch` again before checking and committing, because those commands can recreate bytecode cache files.
+
+## Token intelligence
+
+```bash
+orch token-report
+orch token-report --limit 100
+orch token-report --status completed
+orch token-report --type tool
+orch token-report --agent Bob
+orch token-report --json
+```
+
+`orch token-report` summarizes local runs, external LLM runs, direct tool bypasses, deterministic routes, local reasoning events, LLM events, estimated tokens saved, and proof events. Estimated token savings are operational estimates, not billing claims.

@@ -8,6 +8,7 @@ from typing import Iterable
 
 from .models import RunRecord
 from .store import ObservabilityStore
+from .token_intelligence import build_token_intelligence_report
 
 
 DEFAULT_DASHBOARD_PATH = Path("exports") / "orchgentic_observability_dashboard.html"
@@ -72,6 +73,71 @@ def _metric_card(label: str, value, detail: str = "") -> str:
         <div class="metric-label">{escape(label)}</div>
         <div class="metric-value">{_safe(value)}</div>
         <div class="metric-detail">{_safe(detail)}</div>
+      </section>
+    """
+
+
+def _token_intelligence_section(report: dict) -> str:
+    top = report.get("top_savings_run") or {}
+    proof_events = report.get("proof_events") or []
+    if proof_events:
+        proof_rows = "".join(
+            f"""
+            <tr>
+              <td><button class="run-link run-link-button" type="button" data-token-run-target="{_safe('token-' + _anchor_id(event.get('run_id')))}"><code>{_safe(event.get('run_short_id'))}</code></button></td>
+              <td>{_safe(event.get('event_type'))}</td>
+              <td>{_safe(event.get('component'))}</td>
+              <td>{_safe(event.get('estimated_tokens_saved'))}</td>
+              <td>{_safe(event.get('token_source'))}</td>
+              <td>{_safe(event.get('reason'))}</td>
+            </tr>
+            """
+            for event in proof_events[:8]
+        )
+    else:
+        proof_rows = '<tr><td colspan="6" class="empty">No token proof events yet. Run <code>orch tool run datetime.local --agent Bob</code> to create a direct-tool proof.</td></tr>'
+
+    top_summary = "No saved-token run yet."
+    if top:
+        top_summary = (
+            f"run <button class=\"run-link run-link-button\" type=\"button\" data-token-run-target=\"{_safe('token-' + _anchor_id(top.get('run_id')))}\"><code>{_safe(top.get('run_short_id'))}</code></button> · "
+            f"{_safe(top.get('target'))} · saved≈{_safe(top.get('estimated_tokens_saved'))} · "
+            f"external_llm_used={_safe(top.get('external_llm_used'))}"
+        )
+
+    return f"""
+      <section class="card section token-intelligence">
+        <div class="section-head">
+          <h2>Token Intelligence</h2>
+          <span class="chip">local reasoning proof</span>
+        </div>
+        <p class="muted-block">Shows when Orchgentic avoided external LLM calls, routed locally, and produced estimated token-savings evidence.</p>
+        <div class="metadata-grid">
+          <div class="metadata-item"><span>local_runs</span><strong>{_safe(report.get('local_runs', 0))} ({_safe(report.get('local_run_rate', '0%'))})</strong></div>
+          <div class="metadata-item"><span>external_llm_runs</span><strong>{_safe(report.get('external_llm_runs', 0))} ({_safe(report.get('external_llm_rate', '0%'))})</strong></div>
+          <div class="metadata-item"><span>direct_bypasses</span><strong>{_safe(report.get('direct_bypasses', 0))}</strong></div>
+          <div class="metadata-item"><span>deterministic_routes</span><strong>{_safe(report.get('deterministic_routes', 0))}</strong></div>
+          <div class="metadata-item"><span>local_reasoning_events</span><strong>{_safe(report.get('local_reasoning_events', 0))}</strong></div>
+          <div class="metadata-item"><span>llm_events</span><strong>{_safe(report.get('llm_events', 0))}</strong></div>
+          <div class="metadata-item"><span>estimated_tokens_saved</span><strong>{_safe(report.get('estimated_tokens_saved', 0))}</strong></div>
+          <div class="metadata-item"><span>top_savings_run</span><strong>{top_summary}</strong></div>
+        </div>
+        <p class="muted-block"><strong>Note:</strong> {_safe(report.get('token_source_note'))}.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Run</th>
+              <th>Proof Event</th>
+              <th>Component</th>
+              <th>Saved</th>
+              <th>Source</th>
+              <th>Reason</th>
+            </tr>
+          </thead>
+          <tbody>
+            {proof_rows}
+          </tbody>
+        </table>
       </section>
     """
 
@@ -160,6 +226,34 @@ def _tokens_event_label(event) -> str:
     if getattr(event, "estimated_tokens_saved", 0):
         return f"saved≈{event.estimated_tokens_saved}, source={event.token_source}"
     return getattr(event, "token_source", None) or "-"
+
+
+def _is_token_proof_event(event) -> bool:
+    event_type = getattr(event, "event_type", "") or ""
+    if event_type in {"routing.bypassed", "routing.completed", "reasoning.completed", "llm.started", "llm.completed", "llm.failed"}:
+        return True
+    return bool(getattr(event, "total_tokens", 0) or getattr(event, "estimated_tokens_saved", 0))
+
+
+def _token_proof_event_rows(events) -> str:
+    rows = []
+    for event in events:
+        if not _is_token_proof_event(event):
+            continue
+        rows.append(
+            f"""
+            <tr>
+              <td>{_safe(event.event_type)}</td>
+              <td>{_safe(event.component)}</td>
+              <td>{_safe(event.name)}</td>
+              <td>{_safe(event.total_tokens or 0)}</td>
+              <td>{_safe(event.estimated_tokens_saved or 0)}</td>
+              <td>{_safe(event.token_source)}</td>
+              <td>{_safe(event.message)}</td>
+            </tr>
+            """
+        )
+    return "\n".join(rows) if rows else '<tr><td colspan="7" class="empty">No token proof events found for this run.</td></tr>'
 
 
 def _run_detail_sections(store: ObservabilityStore, runs: Iterable[RunRecord]) -> str:
@@ -262,6 +356,55 @@ def _modal_run_detail_templates(store: ObservabilityStore, runs: Iterable[RunRec
     return "\n".join(templates)
 
 
+def _modal_token_detail_templates(store: ObservabilityStore, runs: Iterable[RunRecord]) -> str:
+    templates = []
+    for run in runs:
+        events = store.list_events(run.run_id)
+        token_proof_count = sum(1 for event in events if _is_token_proof_event(event))
+        local_execution = not bool(run.external_llm_used)
+        templates.append(
+            f"""
+            <template id="{_safe('token-' + _anchor_id(run.run_id))}">
+              <div class="modal-detail token-modal-detail">
+                <div class="detail-grid">
+                  <div><span>run_id</span><strong>{_safe(run.run_id)}</strong></div>
+                  <div><span>external_llm_used</span><strong>{_safe(bool(run.external_llm_used))}</strong></div>
+                  <div><span>local_execution</span><strong>{_safe(local_execution)}</strong></div>
+                  <div><span>provider used</span><strong>{_safe(_provider_used_label(run))}</strong></div>
+                  <div><span>configured provider</span><strong>{_safe(_configured_provider_label(run))}</strong></div>
+                  <div><span>input_tokens</span><strong>{_safe(run.input_tokens or 0)}</strong></div>
+                  <div><span>output_tokens</span><strong>{_safe(run.output_tokens or 0)}</strong></div>
+                  <div><span>total_tokens</span><strong>{_safe(run.total_tokens or 0)}</strong></div>
+                  <div><span>estimated_tokens_saved</span><strong>{_safe(run.estimated_tokens_saved or 0)}</strong></div>
+                  <div><span>token_source</span><strong>{_safe(run.token_source)}</strong></div>
+                  <div><span>token_proof_events</span><strong>{_safe(token_proof_count)}</strong></div>
+                </div>
+
+                <p class="muted-block"><strong>Note:</strong> estimated token savings are operational estimates of avoided LLM routing/execution overhead, not billing claims.</p>
+
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Proof Event</th>
+                      <th>Component</th>
+                      <th>Name</th>
+                      <th>Total Tokens</th>
+                      <th>Saved</th>
+                      <th>Source</th>
+                      <th>Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {_token_proof_event_rows(events)}
+                  </tbody>
+                </table>
+              </div>
+            </template>
+            """
+        )
+    return "\n".join(templates)
+
+
 def _run_detail_metadata_script(runs: Iterable[RunRecord]) -> str:
     items = []
     for run in runs:
@@ -281,15 +424,43 @@ def _run_detail_metadata_script(runs: Iterable[RunRecord]) -> str:
     return json.dumps(items)
 
 
+def _token_detail_metadata_script(runs: Iterable[RunRecord]) -> str:
+    items = []
+    for run in runs:
+        items.append({
+            "id": "token-" + _anchor_id(run.run_id),
+            "short_id": _short_id(run.run_id),
+            "run_id": run.run_id or "",
+            "target": _target(run),
+            "status": run.status or "",
+            "run_type": run.run_type or "",
+            "tokens": _tokens_label(run),
+            "external_llm_used": bool(run.external_llm_used),
+            "estimated_tokens_saved": int(run.estimated_tokens_saved or 0),
+            "total_tokens": int(run.total_tokens or 0),
+            "token_source": run.token_source or "",
+            "run_info_command": f"orch run-info {run.run_id}",
+            "trace_command": f"orch trace {run.run_id}",
+            "export_command": f"orch export-run {run.run_id} --output exports/run-{_short_id(run.run_id)}.json",
+        })
+    return json.dumps(items)
+
+
 def _modal_script(runs: Iterable[RunRecord]) -> str:
     run_details = _run_detail_metadata_script(runs)
+    token_details = _token_detail_metadata_script(runs)
     script = """
   <script>
     (function () {
       var runDetails = __RUN_DETAILS__;
+      var tokenDetails = __TOKEN_DETAILS__;
       var runDetailById = {};
+      var tokenDetailById = {};
       runDetails.forEach(function (item) {
         runDetailById[item.id] = item;
+      });
+      tokenDetails.forEach(function (item) {
+        tokenDetailById[item.id] = item;
       });
 
       var modal = document.getElementById("run-detail-modal");
@@ -308,6 +479,25 @@ def _modal_script(runs: Iterable[RunRecord]) -> str:
 
         modalTitle.innerHTML = "Run Details: <code>" + metadata.short_id + "</code>";
         modalSubtitle.textContent = metadata.run_id + " · " + metadata.target + " · " + metadata.status + " · " + metadata.tokens;
+        modalBody.innerHTML = "";
+        currentRunMetadata = metadata;
+        if (copyStatus) copyStatus.textContent = "";
+        modalBody.appendChild(template.content.cloneNode(true));
+
+        modal.classList.add("open");
+        modal.setAttribute("aria-hidden", "false");
+        history.replaceState(null, "", "#" + id);
+        modalClose.focus();
+      }
+
+      function openTokenModal(id) {
+        var template = document.getElementById(id);
+        var metadata = tokenDetailById[id];
+
+        if (!template || !modal || !modalBody || !metadata) return;
+
+        modalTitle.innerHTML = "Token Details: <code>" + metadata.short_id + "</code>";
+        modalSubtitle.textContent = metadata.run_id + " · external_llm_used=" + metadata.external_llm_used + " · " + metadata.tokens;
         modalBody.innerHTML = "";
         currentRunMetadata = metadata;
         if (copyStatus) copyStatus.textContent = "";
@@ -533,6 +723,13 @@ def _modal_script(runs: Iterable[RunRecord]) -> str:
         });
       });
 
+      document.querySelectorAll("[data-token-run-target]").forEach(function (control) {
+        control.addEventListener("click", function () {
+          var id = control.getAttribute("data-token-run-target");
+          openTokenModal(id);
+        });
+      });
+
       if (modalClose) {
         modalClose.addEventListener("click", closeRunModal);
       }
@@ -550,13 +747,17 @@ def _modal_script(runs: Iterable[RunRecord]) -> str:
       if (window.location.hash) {
         var id = window.location.hash.slice(1);
         if (document.getElementById(id)) {
-          openRunModal(id);
+          if (id.indexOf("token-run-") === 0) {
+            openTokenModal(id);
+          } else {
+            openRunModal(id);
+          }
         }
       }
     })();
   </script>
 """
-    return script.replace("__RUN_DETAILS__", run_details)
+    return script.replace("__RUN_DETAILS__", run_details).replace("__TOKEN_DETAILS__", token_details)
 
 
 
@@ -601,6 +802,7 @@ def build_dashboard_html(
     failures = store.list_failures(limit=25, run_type=run_type, agent=agent, team=team)
     stats = store.get_stats(status=status, run_type=run_type, agent=agent, team=team)
     failure_stats = store.get_failure_stats(run_type=run_type, agent=agent, team=team)
+    token_report = build_token_intelligence_report(store, limit=limit, status=status, run_type=run_type, agent=agent, team=team)
 
     filters = {
         "status": status,
@@ -1055,7 +1257,7 @@ def build_dashboard_html(
     <header>
       <div>
         <div class="brand"><span class="dot"></span> Orchgentic Observability</div>
-        <h1>RUN DASHBOARD</h1>
+        <h1>DASHBOARD</h1>
         <div class="subtitle">Summary of runs, failures, token usage, and estimated savings.</div>
       </div>
       <div class="meta">
@@ -1068,9 +1270,11 @@ def build_dashboard_html(
     <main>
       <div class="grid">
         {_metric_card("Total Runs", stats.get("total_runs", 0), f"Success rate {success_rate}")}
-        {_metric_card("Failures", failed, f"{failure_stats.get("total_failures", 0)} failed run(s)")}
-        {_metric_card("Total Tokens", stats.get("total_tokens", 0), "provider-reported or estimated")}
+        {_metric_card("Local Runs", token_report.get("local_runs", 0), f"{token_report.get('local_run_rate', '0%')} avoided external LLM usage")}
+        {_metric_card("External LLM Runs", token_report.get("external_llm_runs", 0), f"{token_report.get('external_llm_rate', '0%')} used an LLM")}
         {_metric_card("Estimated Tokens Saved", stats.get("estimated_tokens_saved", 0), "operational estimate")}
+        {_metric_card("Total Tokens", stats.get("total_tokens", 0), "provider-reported or estimated")}
+        {_metric_card("Failures", failed, f"{failure_stats.get("total_failures", 0)} failed run(s)")}
       </div>
 
       <div class="two-col">
@@ -1107,6 +1311,8 @@ def build_dashboard_html(
           <div class="metadata-item"><span>success_rate</span><strong>{_safe(success_rate)}</strong></div>
         </div>
       </section>
+
+      {_token_intelligence_section(token_report)}
 
       {first_run_guidance}
 
@@ -1192,6 +1398,7 @@ def build_dashboard_html(
 
       <div id="run-detail-templates" hidden>
         {_modal_run_detail_templates(store, runs)}
+        {_modal_token_detail_templates(store, runs)}
       </div>
 
       <div class="modal-backdrop" id="run-detail-modal" aria-hidden="true">
