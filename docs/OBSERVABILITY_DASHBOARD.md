@@ -171,3 +171,32 @@ Schema label:
 ```text
 orchgentic.observability.v1
 ```
+
+## Dashboard Reliability Check
+
+Use the observability doctor before release validation:
+
+```bash
+orch doctor observability
+```
+
+The dashboard footer also includes the schema label, generated timestamp, and inspection command hints.
+
+## Empty dashboard and first-run guidance
+
+In v0.8.0-beta.2, the dashboard can be generated before any run data exists:
+
+```bash
+orch dashboard
+```
+
+When there are zero runs, the dashboard shows a fresh workspace guidance panel with the recommended first commands:
+
+```bash
+orch tool run datetime.local --agent Bob
+orch doctor observability
+orch dashboard
+orch dashboard --open
+```
+
+`orch dashboard --open` intentionally opens the existing dashboard file without regenerating it. If the dashboard file is missing, run `orch dashboard` first.

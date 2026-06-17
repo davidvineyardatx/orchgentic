@@ -48,3 +48,9 @@ Schema:
 ```text
 orchgentic.observability.v1
 ```
+
+Doctor command:
+
+```bash
+orch doctor observability
+```

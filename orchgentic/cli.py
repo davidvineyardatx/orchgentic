@@ -11,6 +11,7 @@ from pathlib import Path
 import json
 import re
 import sys
+import shutil
 import typer
 import uvicorn
 import webbrowser
@@ -51,6 +52,7 @@ from orchgentic.observability.exporters import (
 )
 from orchgentic.observability.dashboard import (
     DEFAULT_DASHBOARD_PATH,
+    OBSERVABILITY_SCHEMA_VERSION,
     build_dashboard_html,
     write_dashboard_html,
 )
@@ -58,6 +60,7 @@ from orchgentic.observability.dashboard import (
 app = typer.Typer()
 connect_app = typer.Typer(help="Connect external accounts.")
 gmail_app = typer.Typer(help="Manage Gmail connections.")
+doctor_app = typer.Typer(help="Diagnose Orchgentic workspace health.")
 create_app = typer.Typer(help="Create Orchgentic configuration files.")
 memory_app = typer.Typer()
 create_app = typer.Typer(help="Create Orchgentic configuration files.")
@@ -75,6 +78,7 @@ app.add_typer(tool_app, name="tool")
 app.add_typer(create_app, name="create")
 app.add_typer(connect_app, name="connect")
 app.add_typer(gmail_app, name="gmail")
+app.add_typer(doctor_app, name="doctor")
 
 def _agent_path(name):
     return Path("agents") / (name.lower() if name.lower().endswith(".yaml") else f"{name.lower()}.yaml")
@@ -705,7 +709,9 @@ def dashboard(
     if open_browser:
         if not path.exists():
             typer.echo(f"Dashboard file not found: {path}")
-            typer.echo("Run `orch dashboard` first to generate it.")
+            if not path.parent.exists():
+                typer.echo(f"Dashboard directory does not exist yet: {path.parent}")
+            typer.echo("Run `orch dashboard` first to generate it, then run `orch dashboard --open`.")
             raise typer.Exit(1)
 
         ignored_filters = _format_dashboard_filters(
@@ -745,6 +751,167 @@ def dashboard(
         )
     )
 
+
+def _store_path_for_doctor(store: ObservabilityStore) -> Path | None:
+    for attr in ("db_path", "path", "database_path"):
+        value = getattr(store, attr, None)
+        if value:
+            return Path(value)
+    return None
+
+
+def _dashboard_path_for_doctor(output: Path | str = DEFAULT_DASHBOARD_PATH) -> Path:
+    return Path(output)
+
+
+def _display_path(path: Path | str | None) -> str | None:
+    if path is None:
+        return None
+    return str(Path(path))
+
+
+def _observability_doctor_payload(output: Path | str = DEFAULT_DASHBOARD_PATH) -> dict:
+    store = ObservabilityStore()
+    store_path = _store_path_for_doctor(store)
+    dashboard_path = _dashboard_path_for_doctor(output)
+    exports_dir = dashboard_path.parent
+    store_dir = store_path.parent if store_path is not None else None
+
+    stats_error = None
+    runs_error = None
+    try:
+        stats = store.get_stats()
+    except Exception as exc:  # pragma: no cover - defensive clean-install guard
+        stats = {}
+        stats_error = f"{type(exc).__name__}: {exc}"
+
+    try:
+        recent_runs = store.list_runs(limit=1)
+    except Exception as exc:  # pragma: no cover - defensive clean-install guard
+        recent_runs = []
+        runs_error = f"{type(exc).__name__}: {exc}"
+
+    total_runs = int(stats.get("total_runs", 0) or 0)
+    latest_run = recent_runs[0].started_at if recent_runs else None
+
+    event_count = int(stats.get("total_events", 0) or stats.get("events", 0) or 0)
+    if total_runs > 0 and event_count == 0:
+        try:
+            sampled_runs = store.list_runs(limit=min(max(total_runs, 1), 1000))
+            event_count = sum(len(store.list_events(run.run_id)) for run in sampled_runs if getattr(run, "run_id", None))
+        except Exception:  # pragma: no cover - defensive doctor fallback
+            event_count = 0
+
+    if store_path is None:
+        store_state = "unknown"
+    elif store_path.exists():
+        store_state = "found"
+    else:
+        store_state = "not_found"
+
+    dashboard_exists = dashboard_path.exists()
+    exports_dir_exists = exports_dir.exists()
+    store_dir_exists = store_dir.exists() if store_dir is not None else False
+
+    next_steps = []
+    if total_runs > 0:
+        status = "ok"
+        hint = None
+        if not dashboard_exists:
+            next_steps.append("Run `orch dashboard` to generate the local dashboard.")
+        if not exports_dir_exists:
+            next_steps.append("Create exports by running `orch dashboard` or `orch export-runs`.")
+    elif store_state == "found":
+        status = "empty"
+        hint = "Run `orch run Bob` or `orch tool run datetime.local --agent Bob` to create trace data."
+        next_steps.extend([
+            "Run `orch tool run datetime.local --agent Bob` to create a low-risk tool trace.",
+            "Run `orch dashboard` to generate a dashboard, even before production data exists.",
+        ])
+    else:
+        status = "not_initialized"
+        hint = "Run any Orchgentic agent, tool, or team command to create the observability store."
+        next_steps.extend([
+            "Run `orch tool run datetime.local --agent Bob` to initialize observability with a simple trace.",
+            "Run `orch doctor observability` again after the first run.",
+        ])
+
+    checks = {
+        "store_path_known": store_path is not None,
+        "store_exists": store_state == "found",
+        "store_dir_exists": store_dir_exists,
+        "dashboard_exists": dashboard_exists,
+        "exports_dir_exists": exports_dir_exists,
+        "has_runs": total_runs > 0,
+    }
+    if stats_error:
+        checks["stats_error"] = stats_error
+    if runs_error:
+        checks["runs_error"] = runs_error
+
+    return {
+        "schema": OBSERVABILITY_SCHEMA_VERSION,
+        "status": status,
+        "hint": hint,
+        "next_steps": next_steps,
+        "checks": checks,
+        "store": store_state,
+        "path": _display_path(store_path),
+        "store_dir": _display_path(store_dir),
+        "store_dir_exists": store_dir_exists,
+        "runs": total_runs,
+        "events": event_count,
+        "latest_run": latest_run,
+        "dashboard_output": _display_path(dashboard_path),
+        "dashboard_exists": dashboard_exists,
+        "dashboard_parent": _display_path(exports_dir),
+        "dashboard_parent_exists": exports_dir_exists,
+        "exports_dir": _display_path(exports_dir),
+        "exports_dir_exists": exports_dir_exists,
+        "total_tokens": int(stats.get("total_tokens", 0) or 0),
+        "estimated_tokens_saved": int(stats.get("estimated_tokens_saved", 0) or 0),
+    }
+
+def _format_observability_doctor(payload: dict) -> str:
+    lines = ["OBSERVABILITY DOCTOR"]
+    lines.append(f"schema: {payload.get('schema')}")
+    lines.append(f"status: {payload.get('status')}")
+    lines.append(f"store: {payload.get('store')}")
+    lines.append(f"path: {payload.get('path') or '-'}")
+    lines.append(f"store_dir: {payload.get('store_dir') or '-'}")
+    lines.append(f"store_dir_exists: {payload.get('store_dir_exists')}")
+    lines.append(f"runs: {payload.get('runs', 0)}")
+    lines.append(f"events: {payload.get('events', 0)}")
+    lines.append(f"latest_run: {payload.get('latest_run') or '-'}")
+    lines.append(f"dashboard_output: {payload.get('dashboard_output')}")
+    lines.append(f"dashboard_exists: {payload.get('dashboard_exists')}")
+    lines.append(f"dashboard_parent: {payload.get('dashboard_parent')}")
+    lines.append(f"dashboard_parent_exists: {payload.get('dashboard_parent_exists')}")
+    lines.append(f"exports_dir: {payload.get('exports_dir')}")
+    lines.append(f"exports_dir_exists: {payload.get('exports_dir_exists')}")
+    lines.append(f"total_tokens: {payload.get('total_tokens', 0)}")
+    lines.append(f"estimated_tokens_saved: {payload.get('estimated_tokens_saved', 0)}")
+    if payload.get("hint"):
+        lines.append(f"hint: {payload.get('hint')}")
+    next_steps = payload.get("next_steps") or []
+    if next_steps:
+        lines.append("next_steps:")
+        for step in next_steps:
+            lines.append(f"  - {step}")
+    return "\n".join(lines)
+
+
+@doctor_app.command("observability")
+def doctor_observability(
+    output: Path = typer.Option(DEFAULT_DASHBOARD_PATH, "--output", "-o", help="Dashboard path to check."),
+    json_output: bool = typer.Option(False, "--json", help="Output doctor result as JSON."),
+):
+    """Diagnose observability store and dashboard readiness."""
+    payload = _observability_doctor_payload(output=output)
+    typer.echo(json.dumps(payload, indent=2, sort_keys=True, default=str) if json_output else _format_observability_doctor(payload))
+
+
+
 @app.command("failures")
 def failures(
     limit: int = typer.Option(20, "--limit", help="Number of failed runs to show."),
@@ -772,6 +939,234 @@ def failures(
         return
 
     typer.echo(_format_failures(items, group_by=group_by))
+
+
+
+def _display_clean_path(path: Path, root: Path) -> str:
+    try:
+        return str(path.relative_to(root))
+    except ValueError:
+        return str(path)
+
+
+def _collect_clean_testdata_targets(
+    root: Path | None = None,
+    include_logs: bool = True,
+    include_exports: bool = True,
+    include_memory: bool = True,
+    include_caches: bool = True,
+) -> list[dict]:
+    """Collect generated local runtime/test artifacts while preserving config."""
+    root = Path(root or Path.cwd()).resolve()
+    targets: list[dict] = []
+
+    named_dirs = []
+    if include_logs:
+        named_dirs.append(("logs", "observability logs and runtime records"))
+    if include_exports:
+        named_dirs.append(("exports", "generated dashboards and exported run data"))
+    if include_memory:
+        named_dirs.append(("memory", "local memory and knowledge stores"))
+
+    for name, description in named_dirs:
+        path = root / name
+        if path.exists():
+            targets.append({
+                "path": _display_clean_path(path, root),
+                "absolute_path": str(path),
+                "kind": "directory" if path.is_dir() else "file",
+                "description": description,
+            })
+
+    if include_caches:
+        for cache_name in (".pytest_cache",):
+            path = root / cache_name
+            if path.exists():
+                targets.append({
+                    "path": _display_clean_path(path, root),
+                    "absolute_path": str(path),
+                    "kind": "directory" if path.is_dir() else "file",
+                    "description": "test cache",
+                })
+
+        ignored_parts = {".git", ".venv", "venv", "env", "node_modules"}
+        for path in root.rglob("__pycache__"):
+            if any(part in ignored_parts for part in path.relative_to(root).parts):
+                continue
+            if path.is_dir():
+                targets.append({
+                    "path": _display_clean_path(path, root),
+                    "absolute_path": str(path),
+                    "kind": "directory",
+                    "description": "Python bytecode cache",
+                })
+
+        for path in root.rglob("*.pyc"):
+            if any(part in ignored_parts for part in path.relative_to(root).parts):
+                continue
+            if path.exists():
+                targets.append({
+                    "path": _display_clean_path(path, root),
+                    "absolute_path": str(path),
+                    "kind": "file",
+                    "description": "Python bytecode file",
+                })
+
+    # Deduplicate while preserving order.
+    seen = set()
+    unique = []
+    for item in targets:
+        key = item["absolute_path"]
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(item)
+    return unique
+
+
+def _delete_clean_testdata_targets(targets: list[dict]) -> dict:
+    deleted = []
+    failed = []
+    for item in targets:
+        path = Path(item["absolute_path"])
+        try:
+            if not path.exists():
+                continue
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+            deleted.append(item["path"])
+        except Exception as exc:  # pragma: no cover - defensive filesystem reporting
+            failed.append({"path": item["path"], "error": str(exc)})
+    return {"deleted": deleted, "failed": failed}
+
+
+def _summarize_clean_testdata_targets(targets: list[dict]) -> list[dict]:
+    """Collapse noisy cleanup matches into release-friendly target groups."""
+    summary = []
+    seen = set()
+
+    def add(path: str, kind: str, description: str):
+        key = (path, kind, description)
+        if key not in seen:
+            seen.add(key)
+            summary.append({"path": path, "kind": kind, "description": description})
+
+    for item in targets or []:
+        path = str(item.get("path", ""))
+        description = item.get("description", "generated artifact")
+        kind = item.get("kind", "item")
+        normalized = path.replace("\\", "/")
+
+        if normalized in {"logs", "exports", "memory", ".pytest_cache"}:
+            add(path, kind, description)
+        elif "__pycache__" in normalized or normalized.endswith(".pyc"):
+            add("Python bytecode caches", "files/directories", "__pycache__/ and *.pyc artifacts")
+        else:
+            add(path, kind, description)
+
+    return summary
+
+
+def _format_clean_testdata_result(payload: dict, verbose: bool = False) -> str:
+    mode = "DRY RUN" if payload.get("dry_run") else "CLEAN"
+    lines = ["CLEAN TEST DATA", f"mode: {mode}", f"matched: {payload.get('matched', 0)}"]
+    if payload.get("deleted") is not None:
+        lines.append(f"deleted: {len(payload.get('deleted') or [])}")
+    if payload.get("failed"):
+        lines.append(f"failed: {len(payload.get('failed') or [])}")
+
+    lines.append("preserved: agents/, teams/, triggers/, docs/, .env, provider credentials, source code")
+
+    targets = payload.get("targets") or []
+    display_targets = targets if verbose else _summarize_clean_testdata_targets(targets)
+    if display_targets:
+        label = "targets:" if verbose else "target_groups:"
+        lines.append(label)
+        for item in display_targets:
+            lines.append(f"  - {item['path']} ({item['kind']}) - {item['description']}")
+    else:
+        lines.append("targets: none")
+
+    has_bytecode_targets = any(
+        "__pycache__" in str(item.get("path", "")).replace("\\\\", "/")
+        or str(item.get("path", "")).endswith(".pyc")
+        or str(item.get("path", "")) == "Python bytecode caches"
+        for item in targets
+    )
+
+    if targets and not verbose:
+        lines.append("")
+        lines.append("Use --verbose to list every matched cache/file path.")
+
+    if has_bytecode_targets:
+        lines.append("")
+        lines.append("Note: running Python or `orch` can recreate __pycache__/ and *.pyc files.")
+        lines.append("For final release cleanup, run the cleanup as the last command before `git status`.")
+        lines.append("Git Bash:")
+        lines.append("PYTHONDONTWRITEBYTECODE=1 orch clean-testdata --no-dry-run --confirm")
+        lines.append("PowerShell:")
+        lines.append('$env:PYTHONDONTWRITEBYTECODE="1"; orch clean-testdata --no-dry-run --confirm')
+
+    if payload.get("dry_run"):
+        lines.append("")
+        lines.append("No files were deleted. To clean generated runtime/test data, run:")
+        lines.append("orch clean-testdata --no-dry-run --confirm")
+
+    if payload.get("failed"):
+        lines.append("")
+        lines.append("failed_paths:")
+        for item in payload["failed"]:
+            lines.append(f"  - {item['path']}: {item['error']}")
+    return "\n".join(lines)
+
+
+@app.command("clean-testdata")
+def clean_testdata(
+    dry_run: bool = typer.Option(True, "--dry-run/--no-dry-run", help="Preview cleanup without deleting. Enabled by default."),
+    confirm: bool = typer.Option(False, "--confirm", help="Required when using --no-dry-run."),
+    include_logs: bool = typer.Option(True, "--logs/--no-logs", help="Include logs/ observability records."),
+    include_exports: bool = typer.Option(True, "--exports/--no-exports", help="Include generated exports and dashboards."),
+    include_memory: bool = typer.Option(True, "--memory/--no-memory", help="Include local memory and knowledge stores."),
+    include_caches: bool = typer.Option(True, "--caches/--no-caches", help="Include Python and pytest cache artifacts."),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show every matched cleanup target instead of grouped output."),
+    json_output: bool = typer.Option(False, "--json", help="Output cleanup plan/result as JSON."),
+):
+    """Clean generated runtime/test data while preserving configuration."""
+    if not dry_run and not confirm:
+        typer.echo("Refusing to delete generated data without --confirm. Run dry-run first, then use --no-dry-run --confirm.")
+        raise typer.Exit(1)
+
+    targets = _collect_clean_testdata_targets(
+        include_logs=include_logs,
+        include_exports=include_exports,
+        include_memory=include_memory,
+        include_caches=include_caches,
+    )
+    payload = {
+        "dry_run": dry_run,
+        "matched": len(targets),
+        "targets": targets,
+        "preserved": ["agents", "teams", "triggers", "docs", ".env", "provider credentials", "source code"],
+        "release_cleanup": {
+            "git_bash": "PYTHONDONTWRITEBYTECODE=1 orch clean-testdata --no-dry-run --confirm",
+            "powershell": "$env:PYTHONDONTWRITEBYTECODE=\"1\"; orch clean-testdata --no-dry-run --confirm",
+            "note": "Run final cleanup as the last command before git status to avoid recreating Python bytecode caches.",
+        },
+    }
+
+    if dry_run:
+        payload["deleted"] = []
+        payload["failed"] = []
+    else:
+        result = _delete_clean_testdata_targets(targets)
+        payload.update(result)
+
+    if json_output:
+        typer.echo(json.dumps(payload, indent=2, sort_keys=True, default=str))
+    else:
+        typer.echo(_format_clean_testdata_result(payload, verbose=verbose))
 
 @app.command("runs-stats")
 def runs_stats(

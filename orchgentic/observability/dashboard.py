@@ -11,6 +11,7 @@ from .store import ObservabilityStore
 
 
 DEFAULT_DASHBOARD_PATH = Path("exports") / "orchgentic_observability_dashboard.html"
+OBSERVABILITY_SCHEMA_VERSION = "orchgentic.observability.v1"
 
 
 def _safe(value) -> str:
@@ -38,6 +39,20 @@ def _tokens_label(run: RunRecord) -> str:
     if run.estimated_tokens_saved:
         return f"saved≈{run.estimated_tokens_saved}, source={run.token_source}"
     return f"source={run.token_source}"
+
+
+def _provider_used_label(run: RunRecord) -> str:
+    if getattr(run, "external_llm_used", False) is False:
+        return "N/A — no LLM used"
+    if run.provider and run.model:
+        return f"{run.provider} / {run.model}"
+    return run.provider or "-"
+
+
+def _configured_provider_label(run: RunRecord) -> str:
+    if run.provider and run.model:
+        return f"{run.provider} / {run.model}"
+    return run.provider or run.model or "-"
 
 
 def _status_class(status: str | None) -> str:
@@ -99,6 +114,26 @@ def _failure_rows(failures: Iterable[RunRecord]) -> str:
     return "\n".join(rows) if rows else '<tr id="failures-empty-base"><td colspan="5" class="empty">No failures found. That is a good sign — failed runs will appear here when diagnostics are available.</td></tr>'
 
 
+def _first_run_guidance(total_runs: int, loaded_runs: int) -> str:
+    if total_runs or loaded_runs:
+        return ""
+    return """
+      <section class="card section first-run-guidance">
+        <div class="section-head">
+          <h2>Fresh Workspace Guidance</h2>
+          <span class="chip">clean install</span>
+        </div>
+        <p class="muted-block">No observability runs exist yet. This dashboard is ready; generate a simple trace and refresh it.</p>
+        <div class="metadata-grid">
+          <div class="metadata-item"><span>1. Create a trace</span><strong><code>orch tool run datetime.local --agent Bob</code></strong></div>
+          <div class="metadata-item"><span>2. Check health</span><strong><code>orch doctor observability</code></strong></div>
+          <div class="metadata-item"><span>3. Refresh dashboard</span><strong><code>orch dashboard</code></strong></div>
+          <div class="metadata-item"><span>4. Open dashboard</span><strong><code>orch dashboard --open</code></strong></div>
+        </div>
+      </section>
+    """
+
+
 
 def _event_rows(events) -> str:
     rows = []
@@ -146,8 +181,8 @@ def _run_detail_sections(store: ObservabilityStore, runs: Iterable[RunRecord]) -
                 <div><span>status</span><strong>{_safe(run.status)}</strong></div>
                 <div><span>type</span><strong>{_safe(run.run_type)}</strong></div>
                 <div><span>agent/team</span><strong>{_safe(_target(run))}</strong></div>
-                <div><span>provider</span><strong>{_safe(run.provider)}</strong></div>
-                <div><span>model</span><strong>{_safe(run.model)}</strong></div>
+                <div><span>provider used</span><strong>{_safe(_provider_used_label(run))}</strong></div>
+                <div><span>configured provider</span><strong>{_safe(_configured_provider_label(run))}</strong></div>
                 <div><span>duration_ms</span><strong>{_safe(run.duration_ms)}</strong></div>
                 <div><span>tokens</span><strong>{_safe(_tokens_label(run))}</strong></div>
                 <div><span>external_llm_used</span><strong>{_safe(bool(run.external_llm_used))}</strong></div>
@@ -192,8 +227,8 @@ def _modal_run_detail_templates(store: ObservabilityStore, runs: Iterable[RunRec
                   <div><span>status</span><strong>{_safe(run.status)}</strong></div>
                   <div><span>type</span><strong>{_safe(run.run_type)}</strong></div>
                   <div><span>agent/team</span><strong>{_safe(_target(run))}</strong></div>
-                  <div><span>provider</span><strong>{_safe(run.provider)}</strong></div>
-                  <div><span>model</span><strong>{_safe(run.model)}</strong></div>
+                  <div><span>provider used</span><strong>{_safe(_provider_used_label(run))}</strong></div>
+                  <div><span>configured provider</span><strong>{_safe(_configured_provider_label(run))}</strong></div>
                   <div><span>duration_ms</span><strong>{_safe(run.duration_ms)}</strong></div>
                   <div><span>tokens</span><strong>{_safe(_tokens_label(run))}</strong></div>
                   <div><span>external_llm_used</span><strong>{_safe(bool(run.external_llm_used))}</strong></div>
@@ -585,7 +620,8 @@ def build_dashboard_html(
     db_path = getattr(store, "db_path", None) or getattr(store, "path", None) or "-"
     loaded_runs_count = len(runs)
     loaded_failures_count = len(failures)
-    schema_label = "orchgentic.observability.v1"
+    schema_label = OBSERVABILITY_SCHEMA_VERSION
+    first_run_guidance = _first_run_guidance(total, loaded_runs_count)
 
     by_status = stats.get("by_status") or {}
     status_chips = " ".join(
@@ -634,6 +670,8 @@ def build_dashboard_html(
     .run-link:hover code {{ border-color: rgba(255, 138, 31, .72); background: rgba(255, 138, 31, .24); }}
     .top-link {{ color: var(--orange); text-decoration: none; font-size: 13px; font-weight: 700; }}
     .top-link:hover {{ text-decoration: underline; }}
+    .muted-block {{ color: var(--muted); margin: 0 0 14px; line-height: 1.5; }}
+    .first-run-guidance {{ border-color: rgba(255, 138, 31, .42); background: linear-gradient(180deg, rgba(255, 138, 31, .08), rgba(18, 22, 32, .96)); }}
     .detail-subtitle {{ color: var(--muted); margin-top: 6px; font-size: 12px; }}
     .run-detail {{ scroll-margin-top: 18px; }}
     .detail-grid {{
@@ -1023,7 +1061,7 @@ def build_dashboard_html(
       <div class="meta">
         generated_at: {_safe(generated_at)}<br />
         active_filters: {_safe(active_filters)}<br />
-        schema: orchgentic.observability.dashboard.v1
+        schema: {_safe(schema_label)}
       </div>
     </header>
 
@@ -1069,6 +1107,8 @@ def build_dashboard_html(
           <div class="metadata-item"><span>success_rate</span><strong>{_safe(success_rate)}</strong></div>
         </div>
       </section>
+
+      {first_run_guidance}
 
       <section class="card section">
         <div class="section-head">
@@ -1179,7 +1219,11 @@ def build_dashboard_html(
     </main>
 
     <footer>
-      Exported by Orchgentic. Use <code>orch run-info &lt;run_id&gt;</code> and <code>orch trace &lt;run_id&gt;</code> for full trace inspection.
+      <strong>Orchgentic Observability Dashboard</strong>
+      <span>schema: <code>orchgentic.observability.v1</code></span>
+      <span>dashboard_template: <code>orchgentic.observability.dashboard.v1</code></span>
+      <span>generated_at: <code>{_safe(generated_at)}</code></span>
+      <span>Use <code>orch doctor observability</code>, <code>orch run-info &lt;run_id&gt;</code>, and <code>orch trace &lt;run_id&gt;</code> for inspection.</span>
     </footer>
   </div>
 

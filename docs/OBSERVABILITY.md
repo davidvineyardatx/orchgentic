@@ -129,3 +129,67 @@ Schema label:
 ```text
 orchgentic.observability.v1
 ```
+
+## Observability Doctor
+
+Use the doctor command to check store and dashboard readiness:
+
+```bash
+orch doctor observability
+```
+
+JSON output:
+
+```bash
+orch doctor observability --json
+```
+
+The doctor reports:
+
+```text
+schema
+status
+store
+path
+runs
+events
+latest_run
+dashboard_output
+dashboard_exists
+exports_dir
+exports_dir_exists
+total_tokens
+estimated_tokens_saved
+hint
+```
+
+Possible statuses:
+
+```text
+ok
+empty
+not_initialized
+```
+
+
+## Beta.1 Schema Stability
+
+For v0.8.0-beta.1, the public observability schema label is:
+
+```text
+orchgentic.observability.v1
+```
+
+This label is used in dashboard metadata, doctor output, and observability export conventions.
+
+## v0.8.0-beta.2 clean-install behavior
+
+The observability layer is expected to behave clearly before any runs exist. A fresh workspace can run:
+
+```bash
+orch doctor observability
+orch dashboard
+orch dashboard --open
+```
+
+`orch doctor observability` reports store, dashboard, exports directory, run count, event count, and actionable next steps. `orch dashboard` can generate a zero-run dashboard with first-run guidance. `orch dashboard --open` opens an existing dashboard only and tells the user to generate one first when the file is missing.

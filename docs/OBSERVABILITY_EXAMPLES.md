@@ -102,3 +102,20 @@ No runs match the current search or quick filter.
 ```
 
 Clear the search box or choose `All` to restore loaded rows.
+
+## Doctor Example
+
+```bash
+orch doctor observability
+```
+
+Example empty output:
+
+```text
+OBSERVABILITY DOCTOR
+schema: orchgentic.observability.v1
+status: empty
+runs: 0
+events: 0
+hint: Run `orch run Bob` or `orch tool run datetime.local --agent Bob` to create trace data.
+```

@@ -464,3 +464,311 @@ def test_observability_dashboard_pagination_controls(tmp_path):
     assert "page-last" in html
     assert "Showing 0–0 of 0 matching runs" in html
     assert "selectedPageSize" in html
+
+
+def test_observability_doctor_reports_empty_store(tmp_path, monkeypatch):
+    import orchgentic.cli as cli_module
+
+    class EmptyStore:
+        db_path = tmp_path / "observability.db"
+
+        def get_stats(self):
+            return {
+                "total_runs": 0,
+                "total_tokens": 0,
+                "estimated_tokens_saved": 0,
+            }
+
+        def list_runs(self, limit=1):
+            return []
+
+    monkeypatch.setattr(cli_module, "ObservabilityStore", lambda: EmptyStore())
+
+    payload = cli_module._observability_doctor_payload(output=tmp_path / "dashboard.html")
+    assert payload["schema"] == "orchgentic.observability.v1"
+    assert payload["status"] in {"empty", "not_initialized"}
+    assert payload["runs"] == 0
+    assert "hint" in payload
+
+
+def test_observability_dashboard_footer_has_schema_and_doctor(tmp_path):
+    from orchgentic.observability.dashboard import build_dashboard_html
+
+    store = ObservabilityStore(tmp_path / "observability.db")
+    html = build_dashboard_html(store, limit=10)
+    assert "orchgentic.observability.v1" in html
+    assert "orch doctor observability" in html
+    assert "generated_at" in html
+
+
+def test_observability_schema_version_constant_is_stable():
+    from orchgentic.observability.dashboard import OBSERVABILITY_SCHEMA_VERSION
+
+    assert OBSERVABILITY_SCHEMA_VERSION == "orchgentic.observability.v1"
+
+
+def test_observability_doctor_uses_schema_constant(tmp_path, monkeypatch):
+    import orchgentic.cli as cli_module
+    from orchgentic.observability.dashboard import OBSERVABILITY_SCHEMA_VERSION
+
+    class EmptyStore:
+        db_path = tmp_path / "observability.db"
+
+        def get_stats(self):
+            return {"total_runs": 0}
+
+        def list_runs(self, limit=1):
+            return []
+
+    monkeypatch.setattr(cli_module, "ObservabilityStore", lambda: EmptyStore())
+    payload = cli_module._observability_doctor_payload(output=tmp_path / "dashboard.html")
+    assert payload["schema"] == OBSERVABILITY_SCHEMA_VERSION
+
+
+def test_observability_doctor_reports_clean_install_paths(tmp_path, monkeypatch):
+    import orchgentic.cli as cli_module
+
+    class MissingStore:
+        db_path = tmp_path / "logs" / "orchgentic_observability.db"
+
+        def get_stats(self):
+            return {"total_runs": 0, "total_events": 0}
+
+        def list_runs(self, limit=1):
+            return []
+
+    monkeypatch.setattr(cli_module, "ObservabilityStore", lambda: MissingStore())
+
+    payload = cli_module._observability_doctor_payload(output=tmp_path / "exports" / "dashboard.html")
+    assert payload["status"] == "not_initialized"
+    assert payload["store"] == "not_found"
+    assert payload["store_dir_exists"] is False
+    assert payload["dashboard_parent_exists"] is False
+    assert payload["exports_dir_exists"] is False
+    assert "next_steps" in payload
+    assert payload["checks"]["store_exists"] is False
+    assert payload["checks"]["has_runs"] is False
+
+
+def test_observability_doctor_format_includes_next_steps(tmp_path, monkeypatch):
+    import orchgentic.cli as cli_module
+
+    class EmptyStore:
+        db_path = tmp_path / "logs" / "orchgentic_observability.db"
+
+        def get_stats(self):
+            return {"total_runs": 0, "total_events": 0}
+
+        def list_runs(self, limit=1):
+            return []
+
+    (tmp_path / "logs").mkdir()
+    EmptyStore.db_path.write_text("", encoding="utf-8")
+    monkeypatch.setattr(cli_module, "ObservabilityStore", lambda: EmptyStore())
+
+    payload = cli_module._observability_doctor_payload(output=tmp_path / "exports" / "dashboard.html")
+    text = cli_module._format_observability_doctor(payload)
+    assert "next_steps:" in text
+    assert "orch tool run datetime.local --agent Bob" in text
+    assert "dashboard_parent_exists:" in text
+    assert "store_dir_exists:" in text
+
+
+def test_observability_dashboard_zero_run_guidance(tmp_path):
+    from orchgentic.observability.dashboard import build_dashboard_html
+
+    store = ObservabilityStore(tmp_path / "observability.db")
+    html = build_dashboard_html(store, limit=10)
+    assert "Fresh Workspace Guidance" in html
+    assert "orch tool run datetime.local --agent Bob" in html
+    assert "orch doctor observability" in html
+    assert "orch dashboard --open" in html
+    assert "dashboard_template" in html
+
+
+def test_observability_trace_formatter_keeps_separator_before_message(tmp_path):
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+    run = tracer.start_run(run_type="tool", task="datetime.local {}", agent_id="bob", agent_name="Bob")
+    tracer.event(
+        "routing.bypassed",
+        component="routing",
+        name="direct_tool",
+        estimated_tokens_saved=349,
+        token_source="estimated",
+        message="Direct tool execution bypassed LLM routing.",
+    )
+    tracer.complete_run()
+
+    detail = format_run_detail(store.get_run(run.run_id), store.list_events(run.run_id))
+    assert "source=estimated - Direct tool execution bypassed LLM routing." in detail
+    assert "source=estimated- Direct tool execution" not in detail
+
+
+def test_observability_dashboard_shows_provider_not_used_for_direct_tool_run(tmp_path):
+    from orchgentic.observability.dashboard import build_dashboard_html
+
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+    run = tracer.start_run(
+        run_type="tool",
+        task="datetime.local {}",
+        agent_id="bob",
+        agent_name="Bob",
+        provider="groq",
+        model="llama-3.3-70b-versatile",
+    )
+    tracer.event("routing.bypassed", component="routing", name="direct_tool", estimated_tokens_saved=349, token_source="estimated")
+    tracer.complete_run()
+
+    html = build_dashboard_html(store, limit=10)
+    assert "provider used" in html
+    assert "N/A — no LLM used" in html
+    assert "configured provider" in html
+    assert "groq / llama-3.3-70b-versatile" in html
+
+
+def test_observability_doctor_counts_trace_events_when_stats_lacks_event_total(tmp_path, monkeypatch):
+    import orchgentic.cli as cli_module
+
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+    run = tracer.start_run(run_type="tool", task="datetime.local {}", agent_id="bob", agent_name="Bob")
+    tracer.event("routing.bypassed", component="routing", name="direct_tool", estimated_tokens_saved=349, token_source="estimated")
+    tracer.complete_run()
+
+    original_get_stats = store.get_stats
+
+    class StoreWithoutEventTotal:
+        db_path = store.db_path
+
+        def get_stats(self):
+            stats = original_get_stats()
+            stats.pop("total_events", None)
+            stats.pop("events", None)
+            return stats
+
+        def list_runs(self, *args, **kwargs):
+            return store.list_runs(*args, **kwargs)
+
+        def list_events(self, *args, **kwargs):
+            return store.list_events(*args, **kwargs)
+
+    monkeypatch.setattr(cli_module, "ObservabilityStore", lambda: StoreWithoutEventTotal())
+    payload = cli_module._observability_doctor_payload(output=tmp_path / "dashboard.html")
+    assert payload["runs"] == 1
+    assert payload["events"] >= 3
+
+
+def test_clean_testdata_collects_runtime_artifacts_and_preserves_config(tmp_path):
+    import orchgentic.cli as cli_module
+
+    for directory in ["logs", "exports", "memory", "agents", "teams", "triggers", "docs"]:
+        (tmp_path / directory).mkdir()
+    (tmp_path / "logs" / "orchgentic_observability.db").write_text("db", encoding="utf-8")
+    (tmp_path / "exports" / "dashboard.html").write_text("html", encoding="utf-8")
+    (tmp_path / "memory" / "agent_core.db").write_text("memory", encoding="utf-8")
+    (tmp_path / "agents" / "bob.yaml").write_text("agent: {}", encoding="utf-8")
+    (tmp_path / ".pytest_cache").mkdir()
+    (tmp_path / "orchgentic" / "__pycache__").mkdir(parents=True)
+    (tmp_path / "orchgentic" / "__pycache__" / "cli.pyc").write_text("pyc", encoding="utf-8")
+
+    targets = cli_module._collect_clean_testdata_targets(root=tmp_path)
+    target_paths = {item["path"] for item in targets}
+
+    assert "logs" in target_paths
+    assert "exports" in target_paths
+    assert "memory" in target_paths
+    assert ".pytest_cache" in target_paths
+    assert "orchgentic/__pycache__" in target_paths or "orchgentic\\__pycache__" in target_paths
+    assert "agents" not in target_paths
+    assert "teams" not in target_paths
+    assert "triggers" not in target_paths
+    assert "docs" not in target_paths
+
+
+def test_clean_testdata_deletes_runtime_artifacts_only(tmp_path):
+    import orchgentic.cli as cli_module
+
+    for directory in ["logs", "exports", "memory", "agents"]:
+        (tmp_path / directory).mkdir()
+    (tmp_path / "logs" / "orchgentic_observability.db").write_text("db", encoding="utf-8")
+    (tmp_path / "exports" / "dashboard.html").write_text("html", encoding="utf-8")
+    (tmp_path / "memory" / "agent_core.db").write_text("memory", encoding="utf-8")
+    (tmp_path / "agents" / "bob.yaml").write_text("agent: {}", encoding="utf-8")
+
+    targets = cli_module._collect_clean_testdata_targets(root=tmp_path, include_caches=False)
+    result = cli_module._delete_clean_testdata_targets(targets)
+
+    assert result["failed"] == []
+    assert not (tmp_path / "logs").exists()
+    assert not (tmp_path / "exports").exists()
+    assert not (tmp_path / "memory").exists()
+    assert (tmp_path / "agents" / "bob.yaml").exists()
+
+
+def test_clean_testdata_formatter_shows_dry_run_command(tmp_path):
+    import orchgentic.cli as cli_module
+
+    payload = {
+        "dry_run": True,
+        "matched": 2,
+        "deleted": [],
+        "failed": [],
+        "targets": [
+            {"path": "logs", "kind": "directory", "description": "observability logs and runtime records"},
+            {"path": "orchgentic\\__pycache__\\cli.cpython-314.pyc", "kind": "file", "description": "Python bytecode file"},
+        ],
+    }
+    text = cli_module._format_clean_testdata_result(payload)
+    assert "CLEAN TEST DATA" in text
+    assert "mode: DRY RUN" in text
+    assert "target_groups:" in text
+    assert "Python bytecode caches" in text
+    assert "Use --verbose to list every matched cache/file path." in text
+    assert "orch clean-testdata --no-dry-run --confirm" in text
+    assert "PYTHONDONTWRITEBYTECODE=1 orch clean-testdata --no-dry-run --confirm" in text
+    assert "running Python or `orch` can recreate __pycache__/ and *.pyc files" in text
+    assert "preserved:" in text
+    assert "cli.cpython-314.pyc" not in text
+
+
+def test_clean_testdata_formatter_verbose_shows_full_paths(tmp_path):
+    import orchgentic.cli as cli_module
+
+    payload = {
+        "dry_run": True,
+        "matched": 1,
+        "deleted": [],
+        "failed": [],
+        "targets": [
+            {"path": "orchgentic\\__pycache__\\cli.cpython-314.pyc", "kind": "file", "description": "Python bytecode file"},
+        ],
+    }
+    text = cli_module._format_clean_testdata_result(payload, verbose=True)
+    assert "targets:" in text
+    assert "target_groups:" not in text
+    assert "cli.cpython-314.pyc" in text
+
+
+def test_clean_testdata_json_includes_release_cleanup_commands(tmp_path):
+    import orchgentic.cli as cli_module
+
+    payload = {
+        "dry_run": True,
+        "matched": 1,
+        "deleted": [],
+        "failed": [],
+        "targets": [
+            {"path": "orchgentic\\__pycache__\\cli.cpython-314.pyc", "kind": "file", "description": "Python bytecode file"},
+        ],
+        "release_cleanup": {
+            "git_bash": "PYTHONDONTWRITEBYTECODE=1 orch clean-testdata --no-dry-run --confirm",
+            "powershell": "$env:PYTHONDONTWRITEBYTECODE=\"1\"; orch clean-testdata --no-dry-run --confirm",
+            "note": "Run final cleanup as the last command before git status to avoid recreating Python bytecode caches.",
+        },
+    }
+    text = cli_module._format_clean_testdata_result(payload)
+    assert "Git Bash:" in text
+    assert "PowerShell:" in text
+    assert "last command before `git status`" in text

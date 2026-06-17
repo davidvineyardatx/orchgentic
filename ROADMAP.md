@@ -60,3 +60,41 @@ saved dashboard views
 severe-error notifications
 hosted dashboard option
 ```
+
+
+## v0.8.0-alpha.10 — Observability Reliability and Release Readiness
+
+Scope:
+
+```text
+orch doctor observability
+dashboard schema/version footer
+store/status checks
+clear empty/not-initialized hints
+release validation documentation
+```
+
+After alpha.10, the next target is:
+
+```text
+v0.8.0-beta.1 — Observability Stabilization
+```
+
+## v0.8.0-beta.2 — Observability hardening and clean-install polish
+
+Status: in progress / validation-ready.
+
+Focus:
+
+- Clean-install doctor behavior
+- Zero-run dashboard generation
+- Clear dashboard open behavior
+- First-run guidance
+- Fresh workspace validation
+
+
+## v0.8.0-beta.2 release hygiene
+
+- Added `orch clean-testdata` to safely remove generated logs, exports, memory stores, pytest cache, Python bytecode caches, and other local runtime/test artifacts before publishing.
+- The command is dry-run by default and requires `--no-dry-run --confirm` before deleting anything.
+- Configuration and source files are preserved.

@@ -189,3 +189,127 @@ copy trace command
 copy export command
 empty states
 ```
+
+## Doctor Commands
+
+Diagnose observability readiness:
+
+```bash
+orch doctor observability
+orch doctor observability --json
+```
+
+Check a custom dashboard path:
+
+```bash
+orch doctor observability --output exports/custom-dashboard.html
+```
+
+
+## Beta.1 Stable Observability Commands
+
+The following command names are considered stable for v0.8.0-beta.1 developer testing:
+
+```text
+orch runs
+orch run-info
+orch trace
+orch export-run
+orch export-runs
+orch runs-stats
+orch runs-prune
+orch run-delete
+orch failures
+orch dashboard
+orch doctor observability
+```
+
+## Observability clean-install commands
+
+```bash
+orch doctor observability
+orch doctor observability --json
+orch dashboard
+orch dashboard --open
+orch tool run datetime.local --agent Bob
+```
+
+On a clean workspace, `orch doctor observability` explains whether the observability store exists, whether the dashboard file exists, whether the exports directory exists, and what to run next. `orch dashboard` can create a dashboard with zero runs. `orch dashboard --open` only opens an existing dashboard and does not regenerate it.
+
+## Clean generated test/runtime data
+
+Use this before committing or publishing a release when you want to remove local runtime artifacts but keep configuration files.
+
+Preview what would be removed. By default, the command shows grouped targets so the output stays readable:
+
+```bash
+orch clean-testdata
+```
+
+Show every matched path when needed:
+
+```bash
+orch clean-testdata --verbose
+```
+
+Delete generated data after review:
+
+```bash
+orch clean-testdata --no-dry-run --confirm
+```
+
+The command removes generated local artifacts such as:
+
+```text
+logs/
+exports/
+memory/
+.pytest_cache/
+__pycache__/
+*.pyc
+```
+
+It preserves configuration and source files such as:
+
+```text
+agents/
+teams/
+triggers/
+docs/
+.env
+provider credentials
+source code
+```
+
+Optional filters:
+
+```bash
+orch clean-testdata --no-memory
+orch clean-testdata --no-exports
+orch clean-testdata --no-logs
+orch clean-testdata --no-caches
+orch clean-testdata --verbose
+orch clean-testdata --json
+```
+
+## Final release cleanup and Python bytecode
+
+`orch clean-testdata` removes generated runtime/test artifacts, but running Python or `orch` may recreate `__pycache__/` and `*.pyc` files.
+
+For the final cleanup before publishing a GitHub release, run cleanup as the last command before `git status`.
+
+Git Bash:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 orch clean-testdata --no-dry-run --confirm
+git status
+```
+
+PowerShell:
+
+```powershell
+$env:PYTHONDONTWRITEBYTECODE="1"; orch clean-testdata --no-dry-run --confirm
+git status
+```
+
+After this final cleanup, avoid running `pytest`, `python`, or `orch` again before checking and committing, because those commands can recreate bytecode cache files.

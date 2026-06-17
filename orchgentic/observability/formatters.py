@@ -60,6 +60,20 @@ def format_run_list(runs: list[RunRecord]) -> str:
     return "\n".join(lines)
 
 
+def _provider_used_label(run: RunRecord) -> str:
+    if getattr(run, "external_llm_used", False) is False:
+        return "N/A (no LLM used)"
+    if run.provider and run.model:
+        return f"{run.provider} / {run.model}"
+    return run.provider or run.model or "-"
+
+
+def _configured_provider_label(run: RunRecord) -> str:
+    if run.provider and run.model:
+        return f"{run.provider} / {run.model}"
+    return run.provider or run.model or "-"
+
+
 def format_run_summary(run: RunRecord) -> str:
     lines = ["RUN"]
     lines.append(f"id: {run.run_id}")
@@ -69,8 +83,9 @@ def format_run_summary(run: RunRecord) -> str:
         lines.append(f"agent: {run.agent_name or run.agent_id}")
     if run.team_name or run.team_id:
         lines.append(f"team: {run.team_name or run.team_id}")
+    lines.append(f"provider_used: {_provider_used_label(run)}")
     if run.provider or run.model:
-        lines.append(f"provider: {run.provider or '-'} / {run.model or '-'}")
+        lines.append(f"configured_provider: {_configured_provider_label(run)}")
     lines.append(f"external_llm_used: {run.external_llm_used}")
     lines.append(f"started_at: {run.started_at}")
     if run.ended_at:
