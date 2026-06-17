@@ -1,9 +1,5 @@
 # Orchgentic
 
-**Orchgentic** is an open-source, local-first AI agent orchestration framework for building, routing, coordinating, observing, and optimizing agents across tools, memory, knowledge, workflows, events, policies, providers, and teams.
-
-Orchgentic is designed around a YAML-first operational architecture so agent behavior, tools, policies, routing, observability, and token usage can be configured, versioned, inspected, and trusted.
-
 > Stop letting agents become black boxes that eat tokens in the dark.
 
 ## What Orchgentic Is
