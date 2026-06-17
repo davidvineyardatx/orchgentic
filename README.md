@@ -6,42 +6,6 @@ Orchgentic is designed around a YAML-first operational architecture so agent beh
 
 > Stop letting agents become black boxes that eat tokens in the dark.
 
----
-
-## Current Release
-
-**Developer Preview — v0.8.0-beta.3**
-
-Current focus:
-
-```text
-Token Intelligence and Local Reasoning Proof
-```
-
-v0.8.0-beta.3 introduces Orchgentic’s Token Intelligence layer:
-
-- `orch token-report`
-- local vs external LLM run summaries
-- direct tool bypass metrics
-- deterministic route metrics
-- estimated token savings summaries
-- proof events for local/direct execution
-- Token Intelligence dashboard section
-- token-scoped Run ID modal
-- dashboard title polish
-
-The core proof story:
-
-```text
-The agent had a provider configured.
-Orchgentic avoided the LLM.
-The task ran locally or directly.
-Zero external LLM tokens were spent.
-The estimated savings were recorded in the trace.
-```
-
----
-
 ## What Orchgentic Is
 
 Orchgentic is not just an agent runner.
