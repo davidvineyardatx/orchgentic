@@ -1,130 +1,108 @@
-# v0.8.0-beta.3 — Token Intelligence and Local Reasoning Proof
+# Observability v0.8.0-beta.3
 
-v0.8.0-beta.3 makes Orchgentic's token-savings story more visible and provable.
+## Token Intelligence and Local Reasoning Proof
 
-The goal is to show when Orchgentic avoided unnecessary external LLM calls, used deterministic/local routing, executed direct tools, and produced trace evidence for estimated token savings.
+v0.8.0-beta.3 adds Token Intelligence to Orchgentic observability.
 
-## New command
+Token Intelligence shows:
+
+- when Orchgentic avoided external LLM calls
+- when work was routed locally or deterministically
+- estimated tokens saved
+- external tokens used
+- local LLM candidate tokens
+- premium/external candidate tokens
+- token-relevant proof events
+- human-readable reasons for token use or savings
+
+## Key CLI Command
 
 ```bash
 orch token-report
 ```
 
-The report summarizes recent runs and highlights:
-
-```text
-loaded_runs
-local_runs
-external_llm_runs
-direct_tool_runs
-direct_bypasses
-deterministic_routes
-local_reasoning_events
-llm_events
-total_tokens
-estimated_tokens_saved
-proof_events
-```
-
-Example:
+Useful filters:
 
 ```bash
-orch token-report --limit 100
 orch token-report --status completed
-orch token-report --type tool
+orch token-report --type team
+orch token-report --team ContentTeam
 orch token-report --agent Bob
+orch token-report --limit 500
 orch token-report --json
 ```
 
-## What the report proves
+## Token Share Metrics
 
-The token report is designed to answer:
-
-```text
-Was an external LLM used?
-Was the run handled locally?
-Was routing deterministic?
-Did direct tool execution bypass LLM routing?
-How many estimated tokens were avoided?
-Which trace event proves that?
-What was the reason?
-```
-
-For a direct tool run, the proof event should look similar to:
+Token Intelligence reports a token-work split instead of only run counts:
 
 ```text
-routing.bypassed (routing/direct_tool) saved≈349, source=estimated - Direct tool execution bypassed LLM routing.
+local/deterministic share
+external LLM share
+token_work_total
 ```
 
-## Dashboard updates
-
-The static dashboard now includes a **Token Intelligence** section with:
+Calculation:
 
 ```text
-local runs
-external LLM runs
-direct bypasses
-deterministic routes
-local reasoning events
-LLM events
-estimated tokens saved
-top savings run
-proof events
+token_work_total = total_tokens_used + estimated_tokens_saved
+
+local/deterministic share =
+  estimated_tokens_saved / token_work_total
+
+external LLM share =
+  total_tokens_used / token_work_total
 ```
 
-This section helps demonstrate that Orchgentic is not only recording token totals; it is showing why tokens were saved and which execution path produced the savings.
+## Execution Tiers
 
-## Token-source note
-
-Estimated token savings are operational estimates of avoided LLM routing/execution overhead. They are not billing claims.
-
-The report and dashboard intentionally keep this clear so Orchgentic can prove avoided work without pretending to know exact provider billing.
-
-## Suggested validation
-
-```bash
-python -m pytest -q tests/test_observability_v0_8_0.py
-python -m pytest -q
-
-orch tool run datetime.local --agent Bob
-orch token-report
-orch token-report --json
-orch dashboard --limit 500
-orch dashboard --open
-```
-
-## Why this matters
-
-This release strengthens Orchgentic's core product story:
+Token proof events may be classified as:
 
 ```text
-Orchgentic turns black-box agent behavior into observable, token-aware AI operations.
+deterministic_saved
+local_llm_candidate
+premium_external_candidate
+external_llm
+proof_context
 ```
 
-The runtime can now more clearly prove when it avoided LLM usage and preserved tokens through local reasoning, deterministic routes, and direct tool execution.
+## Optimization Labels
 
-## Token Intelligence run modal
-
-Run IDs in the Token Intelligence section open a focused token-only modal.
-
-This keeps dashboard behavior consistent with other run links while limiting the modal content to token intelligence fields for that specific run:
+Token proof events may include:
 
 ```text
-external_llm_used
-local_execution
-provider used
-configured provider
-input_tokens
-output_tokens
-total_tokens
-estimated_tokens_saved
-token_source
-token_proof_events
+already_avoided_external_llm
+move_to_local_llm
+keep_external_or_make_configurable
 ```
 
-The token modal intentionally excludes the full trace timeline and general run detail fields. Use the regular run table/modal for full run inspection, and use the Token Intelligence modal when validating savings, local execution, and LLM avoidance.
+## Dashboard Behavior
 
+The dashboard Token Intelligence panel recalculates when run filters change.
 
-## Dashboard title polish
+Filtering by team, agent, run type, status, or search text updates:
 
-The main dashboard title is now `DASHBOARD` so the page reads as the overall Orchgentic observability dashboard rather than only a run dashboard.
+- local/deterministic share
+- external LLM share
+- token work total
+- estimated tokens saved
+- local LLM candidate tokens
+- premium candidate tokens
+- top savings run
+- proof rows
+
+## Dashboard Layout
+
+The main dashboard panels now appear in this order:
+
+1. Recent Failures
+2. Recent Runs
+3. Token Intelligence
+
+Each major panel is collapsible.
+
+## Token Reason Rows
+
+Token Intelligence proof rows now display Reason text on its own follow-up row for readability.
+
+This keeps the metrics table compact while preserving human-readable explanations.

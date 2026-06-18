@@ -811,6 +811,9 @@ def test_token_intelligence_report_proves_direct_tool_savings(tmp_path):
     assert "type=tool" in report["filter_summary"]
     assert report["local_runs"] == 1
     assert report["external_llm_runs"] == 0
+    assert report["token_work_total"] == 349
+    assert report["local_or_deterministic_token_rate"] == "100.0%"
+    assert report["external_llm_token_rate"] == "0.0%"
     assert report["direct_tool_runs"] == 1
     assert report["direct_bypasses"] == 1
     assert report["estimated_tokens_saved"] == 349
@@ -820,7 +823,7 @@ def test_token_intelligence_report_proves_direct_tool_savings(tmp_path):
 
     text = format_token_intelligence_report(report)
     assert "TOKEN INTELLIGENCE" in text
-    assert "local_runs: 1 (100.0%)" in text
+    assert "local_or_deterministic_token_rate: 100.0%" in text
     assert "estimated_tokens_saved: 349" in text
     assert "Direct tool execution bypassed LLM routing" in text
 
@@ -839,6 +842,9 @@ def test_token_intelligence_report_tracks_external_llm_usage(tmp_path):
     assert report["loaded_runs"] == 1
     assert report["local_runs"] == 0
     assert report["external_llm_runs"] == 1
+    assert report["token_work_total"] == 125
+    assert report["local_or_deterministic_token_rate"] == "0.0%"
+    assert report["external_llm_token_rate"] == "100.0%"
     assert report["llm_events"] == 2
     assert report["total_tokens"] == 125
     assert report["proof_events"][0]["event_type"] in {"llm.completed", "llm.started"}
@@ -856,7 +862,8 @@ def test_dashboard_includes_token_intelligence_section(tmp_path):
     html = build_dashboard_html(store, limit=10)
     assert "Token Intelligence" in html
     assert "local reasoning proof" in html
-    assert "local_runs" in html
+    assert "local/deterministic share" in html
+    assert "external LLM share" in html
     assert "direct_bypasses" in html
     assert "estimated_tokens_saved" in html
     assert "not billing claims" in html
@@ -921,3 +928,315 @@ def test_dashboard_token_intelligence_respects_status_filter(tmp_path):
     assert "estimated_tokens_saved" in html
     assert "saved≈349" in html
     assert "failed task" not in html
+
+
+def test_token_intelligence_llm_events_include_usage_reason(tmp_path):
+    from orchgentic.observability.token_intelligence import build_token_intelligence_report
+
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+    tracer.start_run(run_type="team", task="research data centers", team_id="contentteam", team_name="ContentTeam")
+    tracer.event(
+        "llm.completed",
+        component="provider",
+        name="tool_decision",
+        input_tokens=500,
+        output_tokens=70,
+        token_source="estimated",
+        data={
+            "agent_name": "Researcher",
+            "team": "ContentTeam",
+            "team_role": "member",
+            "llm_purpose": "tool_decision",
+            "token_kind": "tokens_used",
+            "token_work_reason": "Researcher used the LLM to evaluate whether to use web.request to find or verify data related to: research data centers.",
+            "reason": "Researcher used the LLM to evaluate whether to use web.request to find or verify data related to: research data centers.",
+            "token_count_source_reason": "estimated because provider usage metadata is not available in this runtime path",
+        },
+    )
+    tracer.complete_run(status="completed")
+
+    report = build_token_intelligence_report(store)
+    event = report["proof_events"][0]
+
+    assert event["token_meaning"] == "tokens_used"
+    assert event["total_tokens"] == 570
+    assert event["agent_name"] == "Researcher"
+    assert event["team_role"] == "member"
+    assert "Researcher used the LLM to evaluate whether to use web.request" in event["reason"]
+    assert "find or verify data" in event["reason"]
+    assert "Count source" in event["reason"]
+
+
+def test_dashboard_token_modal_distinguishes_estimated_tokens_used_from_saved(tmp_path):
+    from orchgentic.observability.dashboard import build_dashboard_html
+
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+    tracer.start_run(run_type="team", task="research data centers", team_id="contentteam", team_name="ContentTeam")
+    tracer.event(
+        "llm.completed",
+        component="provider",
+        name="tool_decision",
+        input_tokens=500,
+        output_tokens=70,
+        token_source="estimated",
+        data={
+            "agent_name": "Researcher",
+            "team": "ContentTeam",
+            "team_role": "member",
+            "llm_purpose": "tool_decision",
+            "token_kind": "tokens_used",
+            "token_work_reason": "Researcher used the LLM to evaluate whether to use web.request to find or verify data related to: research data centers.",
+            "reason": "Researcher used the LLM to evaluate whether to use web.request to find or verify data related to: research data centers.",
+            "token_count_source_reason": "estimated because provider usage metadata is not available in this runtime path",
+        },
+    )
+    tracer.complete_run(status="completed")
+
+    html = build_dashboard_html(store, limit=10)
+
+    assert "estimated tokens used=570" in html
+    assert "estimated_tokens_saved" in html
+    assert "token_count_source" in html
+    assert "Token usage is estimated because exact provider usage metadata" in html
+    assert "Researcher used the LLM to evaluate whether to use web.request" in html
+    assert "find or verify data" in html
+    assert "Tokens Used" in html
+    assert "Token Meaning" in html
+
+
+def test_tool_runtime_builds_human_readable_tool_decision_reason():
+    from orchgentic.tools.runtime import ToolRuntime
+
+    runtime = ToolRuntime(
+        registry=None,
+        trace_context={
+            "agent_name": "Researcher",
+            "team": "ContentTeam",
+            "team_role": "member",
+            "task_preview": "Research DataCenters and community impact",
+        },
+    )
+    tools = [{"name": "web.request"}, {"name": "knowledge.search"}]
+
+    data = runtime._llm_trace_data("tool_decision", iteration=1, tools=tools)
+
+    assert data["llm_purpose"] == "tool_decision"
+    assert data["available_tools"] == ["knowledge.search", "web.request"]
+    assert "Researcher used the LLM to evaluate whether to use" in data["token_work_reason"]
+    assert "web.request" in data["token_work_reason"]
+    assert "find or verify data" in data["token_work_reason"]
+    assert data["reason"] == data["token_work_reason"]
+
+
+def test_token_intelligence_classifies_local_llm_candidates(tmp_path):
+    from orchgentic.observability.store import ObservabilityStore
+    from orchgentic.observability import TraceCollector
+    from orchgentic.observability.token_intelligence import build_token_intelligence_report
+
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+    tracer.start_run(run_type="team", task="research ecommerce AI", team_id="contentteam", team_name="ContentTeam")
+    tracer.event(
+        "llm.completed",
+        component="provider",
+        name="groq",
+        input_tokens=1200,
+        output_tokens=300,
+        token_source="estimated",
+        data={
+            "agent_name": "Writer",
+            "team": "ContentTeam",
+            "team_role": "member",
+            "llm_purpose": "final_answer_generation",
+            "token_work_reason": "Writer used the LLM to draft from handoff context.",
+            "local_llm_eligible": True,
+            "execution_tier": "local_llm_candidate",
+            "optimization_opportunity": "move_to_local_llm",
+        },
+    )
+    tracer.event(
+        "llm.completed",
+        component="provider",
+        name="groq",
+        input_tokens=3000,
+        output_tokens=800,
+        token_source="estimated",
+        data={
+            "agent_name": "Manager",
+            "team": "ContentTeam",
+            "team_role": "synthesis",
+            "llm_purpose": "final_answer_generation",
+            "token_work_reason": "Manager used the LLM during team synthesis.",
+            "execution_tier": "premium_external_candidate",
+            "optimization_opportunity": "keep_external_or_make_configurable",
+        },
+    )
+    tracer.event(
+        "routing.bypassed",
+        component="routing",
+        name="deterministic_team_role_routing",
+        estimated_tokens_saved=500,
+        token_source="estimated",
+        data={"external_llm_avoided": True, "local_llm_eligible": True},
+    )
+    tracer.complete_run(status="completed")
+
+    report = build_token_intelligence_report(store)
+
+    assert report["external_tokens_local_candidate"] == 1500
+    assert report["external_tokens_premium_candidate"] == 3800
+    assert report["deterministic_tokens_saved"] == 500
+    assert report["token_work_total"] == 5800
+    assert report["local_or_deterministic_token_rate"] == "8.6%"
+    assert report["external_llm_token_rate"] == "91.4%"
+    local_event = next(event for event in report["proof_events"] if event["total_tokens"] == 1500)
+    assert local_event["execution_tier"] == "local_llm_candidate"
+    assert local_event["optimization_opportunity"] == "move_to_local_llm"
+    assert local_event["local_llm_eligible"] is True
+
+
+def test_dashboard_token_modal_shows_local_llm_optimization_fields(tmp_path):
+    from orchgentic.observability.dashboard import build_dashboard_html
+    from orchgentic.observability.store import ObservabilityStore
+    from orchgentic.observability import TraceCollector
+
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+    tracer.start_run(run_type="team", task="research ecommerce AI", team_id="contentteam", team_name="ContentTeam")
+    tracer.event(
+        "llm.completed",
+        component="provider",
+        name="groq",
+        input_tokens=1000,
+        output_tokens=250,
+        token_source="estimated",
+        data={
+            "agent_name": "Reviewer",
+            "team": "ContentTeam",
+            "team_role": "member",
+            "llm_purpose": "final_answer_generation",
+            "token_work_reason": "Reviewer used the LLM to review the draft.",
+            "local_llm_eligible": True,
+            "execution_tier": "local_llm_candidate",
+            "optimization_opportunity": "move_to_local_llm",
+        },
+    )
+    tracer.complete_run(status="completed")
+
+    html = build_dashboard_html(store, limit=10)
+
+    assert "local_llm_candidate_tokens" in html
+    assert "premium_candidate_tokens" in html
+    assert "local/deterministic share" in html
+    assert "external LLM share" in html
+    assert "Execution Tier" in html
+    assert "Optimization" in html
+    assert "move_to_local_llm" in html or "move to local LLM" in html
+
+
+def test_dashboard_orders_primary_sections_and_makes_them_collapsible(tmp_path):
+    from orchgentic.observability.dashboard import build_dashboard_html
+
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+    tracer.start_run(run_type="agent", task="failed task", agent_id="bob", agent_name="Bob")
+    tracer.fail_run(RuntimeError("boom"))
+    tracer.start_run(run_type="tool", task="datetime.local {}", agent_id="bob", agent_name="Bob")
+    tracer.event("routing.bypassed", component="routing", name="direct_tool", estimated_tokens_saved=349, token_source="estimated")
+    tracer.complete_run(status="completed")
+
+    html = build_dashboard_html(store, limit=10)
+
+    failures_idx = html.index('id="recent-failures-panel"')
+    runs_idx = html.index('id="recent-runs-panel"')
+    token_idx = html.index('id="token-intelligence-panel"')
+
+    assert failures_idx < runs_idx < token_idx
+    assert '<details open class="card section collapsible-section" id="recent-failures-panel">' in html
+    assert '<details open class="card section collapsible-section" id="recent-runs-panel">' in html
+    assert 'collapsible-section token-intelligence' in html
+    assert 'details.section > summary.section-head::after' in html
+
+
+def test_dashboard_filters_recalculate_token_intelligence_from_matching_runs(tmp_path):
+    from orchgentic.observability.dashboard import build_dashboard_html
+
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+    kept = tracer.start_run(run_type="team", task="team task", team_id="contentteam", team_name="ContentTeam")
+    tracer.event("routing.bypassed", component="routing", name="deterministic_team_role_routing", estimated_tokens_saved=100, token_source="estimated")
+    tracer.event(
+        "llm.completed",
+        component="provider",
+        name="groq",
+        input_tokens=200,
+        output_tokens=50,
+        token_source="estimated",
+        data={"execution_tier": "local_llm_candidate", "optimization_opportunity": "move_to_local_llm"},
+    )
+    tracer.complete_run(status="completed")
+
+    dropped = tracer.start_run(run_type="tool", task="tool task", agent_id="bob", agent_name="Bob")
+    tracer.event("routing.bypassed", component="routing", name="direct_tool", estimated_tokens_saved=349, token_source="estimated")
+    tracer.complete_run(status="completed")
+
+    html = build_dashboard_html(store, limit=10)
+
+    assert "function applyTokenIntelligenceFilters" in html
+    assert "token-local-deterministic-share" in html
+    assert "token-external-llm-share" in html
+    assert "token-work-total" in html
+    assert "token-local-llm-candidate" in html
+    assert "token-premium-candidate" in html
+    assert "data-run-id" in html
+    assert "data-token-proof-row" in html
+    assert "token-empty-filtered" in html
+    assert kept.run_id in html
+    assert dropped.run_id in html
+    assert "local_candidate_tokens" in html
+    assert "applyTokenIntelligenceFilters(matchingRows)" in html
+
+
+def test_dashboard_top_savings_link_uses_dom_nodes_not_unescaped_inner_html(tmp_path):
+    from orchgentic.observability.dashboard import build_dashboard_html
+
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+    tracer.start_run(run_type="team", task="team task", team_id="contentteam", team_name="ContentTeam")
+    tracer.event("routing.bypassed", component="routing", name="deterministic_team_role_routing", estimated_tokens_saved=100, token_source="estimated")
+    tracer.complete_run(status="completed")
+
+    html = build_dashboard_html(store, limit=10)
+
+    assert "topElement.innerHTML = \"run <button" not in html
+    assert "document.createElement(\"button\")" in html
+    assert "runButton.setAttribute(\"data-token-run-target\", topSavings.id)" in html
+
+
+def test_dashboard_token_reason_uses_full_width_followup_rows(tmp_path):
+    from orchgentic.observability.dashboard import build_dashboard_html
+
+    store = ObservabilityStore(tmp_path / "observability.db")
+    tracer = TraceCollector(store=store)
+    tracer.start_run(run_type="team", task="team task", team_id="contentteam", team_name="ContentTeam")
+    tracer.event(
+        "routing.bypassed",
+        component="routing",
+        name="deterministic_team_role_routing",
+        estimated_tokens_saved=100,
+        token_source="estimated",
+        data={"reason": "Known team roles were assigned deterministically."},
+    )
+    tracer.complete_run(status="completed")
+
+    html = build_dashboard_html(store, limit=10)
+
+    assert 'class="token-reason-row"' in html
+    assert 'class="token-reason-cell"' in html
+    assert '<span>Reason:</span>' in html
+    assert 'data-token-proof-reason-row="true"' in html
+    assert 'rowspan="2"' in html
+    assert 'colspan="8" class="token-reason-cell"' in html
+    assert 'document.querySelectorAll("[data-token-proof-reason-row]")' in html

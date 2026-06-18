@@ -52,6 +52,95 @@ def _is_deterministic_route_event(event: TraceEvent) -> bool:
     )
 
 
+
+def _token_event_reason(event: TraceEvent) -> str:
+    data = event.data or {}
+    explicit_reason = data.get("token_work_reason") or data.get("reason")
+    if explicit_reason:
+        reason = explicit_reason
+    elif event.message:
+        reason = event.message
+    elif event.event_type.startswith("llm."):
+        purpose = data.get("llm_purpose") or event.name or "LLM call"
+        actor = data.get("agent_name") or data.get("agent_id") or "agent"
+        team = data.get("team")
+        role = data.get("team_role") or data.get("role")
+        scope = actor
+        if team:
+            scope += f" / team={team}"
+        if role:
+            scope += f" / role={role}"
+        reason = f"LLM tokens used by {scope} for {purpose}."
+    elif event.estimated_tokens_saved:
+        reason = data.get("savings_reason") or data.get("reason") or "Estimated tokens saved by local/direct routing."
+    else:
+        reason = data.get("reason") or data.get("llm_purpose") or "Trace event included for token proof context."
+
+    source_reason = data.get("token_count_source_reason")
+    if source_reason and int(event.total_tokens or 0):
+        reason = f"{reason} Count source: {source_reason}."
+    return reason
+
+
+def _token_event_meaning(event: TraceEvent) -> str:
+    if int(event.total_tokens or 0):
+        return "tokens_used"
+    if int(event.estimated_tokens_saved or 0):
+        return "tokens_saved"
+    return "proof_context"
+
+
+def _event_local_llm_eligible(event: TraceEvent) -> bool:
+    data = event.data or {}
+    if data.get("local_llm_eligible") is not None:
+        return bool(data.get("local_llm_eligible"))
+    if not int(event.total_tokens or 0):
+        return False
+    purpose = str(data.get("llm_purpose") or event.name or "").lower()
+    role = str(data.get("team_role") or data.get("role") or "").lower()
+    agent = str(data.get("agent_name") or data.get("agent_id") or "").lower()
+    if purpose in {"tool_decision", "routing", "planning", "quality_review"}:
+        return True
+    if role in {"member", "researcher", "writer", "reviewer"}:
+        return True
+    if any(marker in agent for marker in ["research", "writer", "review"]):
+        return True
+    return False
+
+
+def _execution_tier(event: TraceEvent) -> str:
+    if int(event.estimated_tokens_saved or 0):
+        return "deterministic_saved"
+    if not int(event.total_tokens or 0):
+        return "proof_context"
+    data = event.data or {}
+    explicit = data.get("execution_tier") or data.get("recommended_execution_tier")
+    if explicit:
+        return str(explicit)
+    role = str(data.get("team_role") or data.get("role") or "").lower()
+    purpose = str(data.get("llm_purpose") or event.name or "").lower()
+    if role == "synthesis" or "synthesis" in purpose:
+        return "premium_external_candidate"
+    if _event_local_llm_eligible(event):
+        return "local_llm_candidate"
+    return "external_llm"
+
+
+def _optimization_opportunity(event: TraceEvent) -> str:
+    data = event.data or {}
+    if data.get("optimization_opportunity"):
+        return str(data.get("optimization_opportunity"))
+    tier = _execution_tier(event)
+    if tier == "deterministic_saved":
+        return "already_avoided_external_llm"
+    if tier == "local_llm_candidate":
+        return "move_to_local_llm"
+    if tier == "premium_external_candidate":
+        return "keep_external_or_make_configurable"
+    if tier == "proof_context":
+        return "none"
+    return "monitor"
+
 def build_token_intelligence_report(
     store: ObservabilityStore,
     *,
@@ -77,6 +166,7 @@ def build_token_intelligence_report(
     direct_tool_runs = sum(1 for run in runs if run.run_type == "tool" and not run.external_llm_used)
     total_tokens = sum(int(run.total_tokens or 0) for run in runs)
     estimated_tokens_saved = sum(int(run.estimated_tokens_saved or 0) for run in runs)
+    token_work_total = total_tokens + estimated_tokens_saved
 
     proof_events: list[dict[str, Any]] = []
     route_counter: Counter[str] = Counter()
@@ -87,6 +177,10 @@ def build_token_intelligence_report(
     deterministic_routes = 0
     local_reasoning_events = 0
     llm_events = 0
+    external_tokens_local_candidate = 0
+    external_tokens_premium_candidate = 0
+    external_tokens_other = 0
+    deterministic_tokens_saved = 0
 
     top_savings_run: RunRecord | None = None
     for run in runs:
@@ -115,6 +209,19 @@ def build_token_intelligence_report(
                 route_name = data.get("route_type") or event.name or event.event_type
                 if event.event_type.startswith("routing."):
                     route_counter[str(route_name)] += 1
+                event_total_tokens = int(event.total_tokens or 0)
+                event_saved_tokens = int(event.estimated_tokens_saved or 0)
+                event_execution_tier = _execution_tier(event)
+                event_local_llm_eligible = _event_local_llm_eligible(event)
+                event_optimization_opportunity = _optimization_opportunity(event)
+                if event_execution_tier == "local_llm_candidate":
+                    external_tokens_local_candidate += event_total_tokens
+                elif event_execution_tier == "premium_external_candidate":
+                    external_tokens_premium_candidate += event_total_tokens
+                elif event_total_tokens:
+                    external_tokens_other += event_total_tokens
+                if event_saved_tokens:
+                    deterministic_tokens_saved += event_saved_tokens
                 proof_events.append(
                     {
                         "run_id": run.run_id,
@@ -127,10 +234,18 @@ def build_token_intelligence_report(
                         "name": event.name,
                         "status": event.status,
                         "message": event.message,
-                        "total_tokens": int(event.total_tokens or 0),
-                        "estimated_tokens_saved": int(event.estimated_tokens_saved or 0),
+                        "total_tokens": event_total_tokens,
+                        "estimated_tokens_saved": event_saved_tokens,
                         "token_source": event.token_source,
-                        "reason": event.message or data.get("reason") or data.get("savings_reason"),
+                        "execution_tier": event_execution_tier,
+                        "local_llm_eligible": event_local_llm_eligible,
+                        "optimization_opportunity": event_optimization_opportunity,
+                        "reason": _token_event_reason(event),
+                        "token_meaning": _token_event_meaning(event),
+                        "llm_purpose": data.get("llm_purpose"),
+                        "agent_name": data.get("agent_name") or run.agent_name,
+                        "team_role": data.get("team_role") or data.get("role"),
+                        "token_count_source_reason": data.get("token_count_source_reason"),
                         "route_type": data.get("route_type") or event.name,
                     }
                 )
@@ -164,6 +279,15 @@ def build_token_intelligence_report(
         "llm_events": llm_events,
         "total_tokens": total_tokens,
         "estimated_tokens_saved": estimated_tokens_saved,
+        "token_work_total": token_work_total,
+        "local_or_deterministic_token_rate": _pct(estimated_tokens_saved, token_work_total),
+        "external_llm_token_rate": _pct(total_tokens, token_work_total),
+        "deterministic_tokens_saved": deterministic_tokens_saved,
+        "external_tokens_used": total_tokens,
+        "external_tokens_local_candidate": external_tokens_local_candidate,
+        "external_tokens_premium_candidate": external_tokens_premium_candidate,
+        "external_tokens_other": external_tokens_other,
+        "external_tokens_optimization_rate": _pct(external_tokens_local_candidate, total_tokens),
         "token_source_note": "estimated token savings are operational estimates of avoided LLM routing/execution overhead, not billing claims",
         "route_counts": dict(route_counter),
         "event_counts": dict(event_counter),
@@ -189,8 +313,17 @@ def format_token_intelligence_report(report: dict[str, Any]) -> str:
     if filters:
         lines.append("filters: " + ", ".join(f"{key}={value}" for key, value in filters.items()))
     lines.append(f"loaded_runs: {report.get('loaded_runs', 0)}")
-    lines.append(f"local_runs: {report.get('local_runs', 0)} ({report.get('local_run_rate', '0%')})")
-    lines.append(f"external_llm_runs: {report.get('external_llm_runs', 0)} ({report.get('external_llm_rate', '0%')})")
+    lines.append(f"token_work_total: {report.get('token_work_total', 0)}")
+    lines.append(
+        "local_or_deterministic_token_rate: "
+        f"{report.get('local_or_deterministic_token_rate', '0%')} "
+        f"({report.get('estimated_tokens_saved', 0)} saved/avoided)"
+    )
+    lines.append(
+        "external_llm_token_rate: "
+        f"{report.get('external_llm_token_rate', '0%')} "
+        f"({report.get('total_tokens', 0)} used)"
+    )
     lines.append(f"direct_tool_runs: {report.get('direct_tool_runs', 0)}")
     lines.append(f"direct_bypasses: {report.get('direct_bypasses', 0)}")
     lines.append(f"deterministic_routes: {report.get('deterministic_routes', 0)}")
@@ -198,6 +331,8 @@ def format_token_intelligence_report(report: dict[str, Any]) -> str:
     lines.append(f"llm_events: {report.get('llm_events', 0)}")
     lines.append(f"total_tokens: {report.get('total_tokens', 0)}")
     lines.append(f"estimated_tokens_saved: {report.get('estimated_tokens_saved', 0)}")
+    lines.append(f"external_tokens_local_candidate: {report.get('external_tokens_local_candidate', 0)} ({report.get('external_tokens_optimization_rate', '0%')})")
+    lines.append(f"external_tokens_premium_candidate: {report.get('external_tokens_premium_candidate', 0)}")
     lines.append(f"token_source_note: {report.get('token_source_note')}")
 
     top = report.get("top_savings_run")
@@ -223,10 +358,12 @@ def format_token_intelligence_report(report: dict[str, Any]) -> str:
             token_bits.append(f"source={event.get('token_source')}")
             reason = event.get("reason") or ""
             suffix = f" - {reason}" if reason else ""
+            tier = event.get("execution_tier") or "-"
+            opportunity = event.get("optimization_opportunity") or "-"
             lines.append(
                 f"  - {event.get('run_short_id')} {event.get('event_type')} "
                 f"({event.get('component')}/{event.get('name') or '-'}) "
-                f"{', '.join(token_bits)}{suffix}"
+                f"{', '.join(token_bits)} tier={tier} opportunity={opportunity}{suffix}"
             )
     else:
         lines.append("")

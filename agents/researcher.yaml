@@ -5,7 +5,7 @@ agent:
     description: Research Specialist for team workflows.
     instructions: |
       Find and organize useful facts, context, and evidence.
-    provider: {type: lmstudio, model: qwen3}
+    provider: {type: groq, model: llama-3.3-70b-versatile}
     capabilities: [knowledge.search, memory.search, datetime.now, web.request]
     tools: [knowledge.search, memory.search, datetime.now, web.request]
     tool_runtime: {enabled: true, max_iterations: 4, timeout_seconds: 90, allow_parallel: false, save_results_to_memory: false}

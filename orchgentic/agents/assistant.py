@@ -20,9 +20,66 @@ class AssistantAgent:
     def _allowed_tools(self):
         return sorted(set(list(self.config.tools or []) + [c for c in self.config.capabilities if '.' in c]))
 
+    def _trace_context(self, identity: AgentIdentity, task: str, metadata: dict) -> dict:
+        return {
+            "agent_id": identity.id,
+            "agent_name": identity.name,
+            "agent_role": identity.role,
+            "team": metadata.get("team"),
+            "team_role": metadata.get("role"),
+            "memory_policy": metadata.get("memory_policy"),
+            "task_preview": (task or "")[:220],
+        }
+
+    def _llm_trace_message(self, identity: AgentIdentity, metadata: dict, purpose: str, task: str | None = None) -> str:
+        task_preview = (task or "the task").strip()[:220]
+        team = metadata.get("team")
+        role = str(metadata.get("role") or "").lower()
+        if team and role == "orchestrator":
+            return f"{identity.name} used the LLM as team orchestrator to plan member contributions for: {task_preview}."
+        if team and role == "synthesis":
+            return f"{identity.name} used the LLM during team synthesis to combine member outputs into the final response for: {task_preview}."
+        if "research" in identity.name.lower():
+            return f"{identity.name} used the LLM to produce research-oriented output and identify verifiable information related to: {task_preview}."
+        if "writer" in identity.name.lower():
+            return f"{identity.name} used the LLM to draft clear content from the available context for: {task_preview}."
+        if "review" in identity.name.lower():
+            return f"{identity.name} used the LLM to review quality, clarity, and completeness for: {task_preview}."
+        return f"{identity.name} used the LLM for {purpose} while working on: {task_preview}."
+
+    def _llm_cost_classification(self, identity: AgentIdentity, metadata: dict, purpose: str) -> dict:
+        """Classify an LLM call for Token Intelligence optimization reporting."""
+        team_role = str(metadata.get("team_role") or metadata.get("role") or "").lower()
+        agent_name = (identity.name or "").lower()
+        if team_role == "synthesis" or purpose == "team_synthesis":
+            return {
+                "execution_tier": "premium_external_candidate",
+                "recommended_execution_tier": "premium_external_or_configurable",
+                "local_llm_eligible": False,
+                "optimization_opportunity": "keep_external_or_make_configurable",
+                "optimization_reason": "Final team synthesis is high-value output work; keep on an external LLM by default, but allow configuration later.",
+            }
+        if team_role in {"member", "researcher", "writer", "reviewer"} or any(marker in agent_name for marker in ["research", "writer", "review"]):
+            return {
+                "execution_tier": "local_llm_candidate",
+                "recommended_execution_tier": "local_llm",
+                "local_llm_eligible": True,
+                "optimization_opportunity": "move_to_local_llm",
+                "optimization_reason": "Team member generation/review is a strong local LLM candidate; reserve external LLMs for premium synthesis or hard reasoning.",
+            }
+        return {
+            "execution_tier": "external_llm",
+            "recommended_execution_tier": "external_llm",
+            "local_llm_eligible": False,
+            "optimization_opportunity": "monitor",
+            "optimization_reason": "No local LLM eligibility rule matched this LLM call yet.",
+        }
+
     async def run(self, task, *, show_plan=False, debug=False, reflection=True, metadata=None, tracer=None):
         run=RunState(run_id=(tracer.run_id if tracer and tracer.run_id else str(uuid.uuid4())), status=RunStatus.RUNNING); identity=AgentIdentity(self.config.id,self.config.name,self.config.role,self.config.description); metadata=metadata or {}
         agent_started = time.perf_counter()
+        trace_context = self._trace_context(identity, task, metadata)
+        llm_cost_classification = self._llm_cost_classification(identity, metadata, 'final_answer_generation')
         if tracer:
             tracer.event(
                 'agent.started',
@@ -125,14 +182,68 @@ class AssistantAgent:
             if plan: system += '\n\nPlan:\n' + plan.to_text()
             messages=[{'role':'system','content':system},{'role':'user','content':task}]
             tool_observations=[]
-            if self.config.tool_runtime.enabled:
-                runtime=ToolRuntime(self.tool_registry, allowed_tools=self._allowed_tools(), max_iterations=self.config.tool_runtime.max_iterations, timeout_seconds=self.config.tool_runtime.timeout_seconds, tracer=tracer)
+            tool_decision_policy = str(metadata.get('tool_decision_policy') or '').lower()
+            skip_tool_decision = tool_decision_policy == 'skip'
+            if tracer and skip_tool_decision:
+                skipped_iterations = metadata.get('estimated_tool_decision_iterations_saved') or 1
+                try:
+                    skipped_iterations = max(1, int(skipped_iterations))
+                except Exception:
+                    skipped_iterations = 1
+                base_tool_decision_estimate = estimate_tokens(messages) + 300
+                routing_event_name = metadata.get('tool_decision_policy_event_name') or 'deterministic_tool_decision_policy'
+                tracer.event(
+                    'routing.bypassed',
+                    component='routing',
+                    name=routing_event_name,
+                    status='completed',
+                    message='Team role policy skipped external LLM tool-decision planning.',
+                    estimated_tokens_saved=base_tool_decision_estimate * skipped_iterations,
+                    token_source='estimated',
+                    data={
+                        **trace_context,
+                        'routing_mode': routing_event_name,
+                        'savings_reason': 'team_role_policy_bypassed_tool_decision_llm',
+                        'reason': metadata.get('tool_decision_policy_reason') or 'Tool-decision LLM call skipped by team role policy.',
+                        'local_llm_eligible': True,
+                        'external_llm_avoided': True,
+                        'tool_decision_policy': tool_decision_policy,
+                        'estimated_tool_decision_iterations_saved': skipped_iterations,
+                        'estimated_tokens_saved_per_iteration': base_tool_decision_estimate,
+                    },
+                )
+            if self.config.tool_runtime.enabled and not skip_tool_decision:
+                runtime=ToolRuntime(
+                    self.tool_registry,
+                    allowed_tools=self._allowed_tools(),
+                    max_iterations=self.config.tool_runtime.max_iterations,
+                    timeout_seconds=self.config.tool_runtime.timeout_seconds,
+                    tracer=tracer,
+                    trace_context=trace_context,
+                )
                 answer, tool_observations = await runtime.run_loop(self.provider,messages,debug=debug)
                 if tool_observations: self.logger.write(run.run_id,'TOOL_OBSERVATIONS',tool_observations)
             else:
                 llm_started = time.perf_counter()
                 if tracer:
-                    tracer.event('llm.started', component='provider', name=getattr(self.provider, '__class__', type(self.provider)).__name__, status='started', data={'provider': getattr(self.config.provider, 'type', None), 'model': getattr(self.config.provider, 'model', None)})
+                    tracer.event(
+                        'llm.started',
+                        component='provider',
+                        name=getattr(self.provider, '__class__', type(self.provider)).__name__,
+                        status='started',
+                        message=self._llm_trace_message(identity, metadata, 'final_answer_generation', task),
+                        data={
+                            **trace_context,
+                            'provider': getattr(self.config.provider, 'type', None),
+                            'model': getattr(self.config.provider, 'model', None),
+                            'llm_purpose': 'final_answer_generation',
+                            'token_work_reason': self._llm_trace_message(identity, metadata, 'final_answer_generation', task),
+                            'reason': self._llm_trace_message(identity, metadata, 'final_answer_generation', task),
+                            'token_kind': 'tokens_used',
+                            'token_count_source_reason': 'estimated because provider usage metadata is not available in this runtime path',
+                            **llm_cost_classification,
+                        },
+                    )
                 answer = await self.provider.generate(messages)
                 if tracer:
                     tracer.event(
@@ -144,7 +255,18 @@ class AssistantAgent:
                         input_tokens=estimate_tokens(messages),
                         output_tokens=estimate_tokens(answer),
                         token_source='estimated',
-                        data={'model': getattr(self.config.provider, 'model', None)},
+                        message=self._llm_trace_message(identity, metadata, 'final_answer_generation', task),
+                        data={
+                            **trace_context,
+                            'model': getattr(self.config.provider, 'model', None),
+                            'provider': getattr(self.config.provider, 'type', None),
+                            'llm_purpose': 'final_answer_generation',
+                            'token_work_reason': self._llm_trace_message(identity, metadata, 'final_answer_generation', task),
+                            'reason': self._llm_trace_message(identity, metadata, 'final_answer_generation', task),
+                            'token_kind': 'tokens_used',
+                            'token_count_source_reason': 'estimated because provider usage metadata is not available in this runtime path',
+                            **llm_cost_classification,
+                        },
                     )
             self.logger.write(run.run_id,'ANSWER',answer)
             ref=None

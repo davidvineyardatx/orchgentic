@@ -1,230 +1,77 @@
 # Observability Dashboard
 
-The Orchgentic observability dashboard is a local, static HTML dashboard generated from the local observability store.
+The Orchgentic observability dashboard is a local static HTML dashboard generated from local run history and trace data.
 
-It is intentionally dependency-free:
-
-```text
-no server
-no hosted service
-no frontend build
-no external dashboard dependency
-```
-
-## Generate a Dashboard
+Generate:
 
 ```bash
 orch dashboard
 ```
 
-Default output:
-
-```text
-exports/orchgentic_observability_dashboard.html
-```
-
-## Open Existing Dashboard
+Open the existing dashboard:
 
 ```bash
 orch dashboard --open
 ```
 
-`--open` opens the existing dashboard file. It does **not** regenerate the dashboard.
-
-This prevents accidental loss of filters.
-
-## Filtered Dashboard Workflow
-
-Generate a filtered dashboard:
-
-```bash
-orch dashboard --team ContentTeam
-```
-
-Open that exact generated file:
-
-```bash
-orch dashboard --open
-```
-
-Other filters:
-
-```bash
-orch dashboard --agent Bob
-orch dashboard --type tool
-orch dashboard --status completed
-```
-
-Supported aliases:
-
-```bash
-orch dashboard --agent-name Bob
-orch dashboard --team-name ContentTeam
-```
-
-## Loaded Runs and Pagination
-
-The dashboard is a static snapshot. `--limit` controls how many recent runs are loaded into the HTML file:
+Generate with a larger run set:
 
 ```bash
 orch dashboard --limit 500
 ```
 
-The browser then paginates the loaded rows.
-
-Dashboard pagination controls:
-
-```text
-Page size: 25 / 50 / 100 / All
-First
-Previous
-Next
-Last
-Showing X–Y of Z matching runs
-```
-
-Pagination works with search and quick filters.
-
-## Search and Quick Filters
-
-The dashboard includes client-side search over:
-
-```text
-run id
-status
-type
-agent/team
-task
-```
-
-Quick filters:
-
-```text
-All
-Completed
-Failed
-Holds
-Tool
-Agent
-Team
-```
-
-## Modal Run Details
-
-Click a Run ID to open a modal with run details and trace events.
-
-The modal can be closed with:
-
-```text
-Close button
-Esc key
-click outside the modal
-```
-
-## Copy Buttons
-
-The run detail modal includes copy buttons for:
-
-```text
-Copy Run ID
-Copy run-info command
-Copy trace command
-Copy export command
-```
-
-Generated commands look like:
+Generate with a team filter:
 
 ```bash
-orch run-info <run_id>
-orch trace <run_id>
-orch export-run <run_id> --output exports/run-<short_id>.json
+orch dashboard --team ContentTeam
 ```
 
-## Empty States
+## Panel Order
 
-The dashboard distinguishes:
+The dashboard prioritizes triage first:
 
-```text
-no runs loaded
-no failed runs
-no runs matching current search/filter
-```
+1. Recent Failures
+2. Recent Runs
+3. Token Intelligence
 
-## Metadata Panel
+Each major section is collapsible.
 
-The dashboard metadata panel shows:
+## Token Intelligence
 
-```text
-generated_at
-database path
-active filters
-limit
-loaded runs
-loaded failures
-matching/visible runs
-success rate
-schema label
-```
+The Token Intelligence panel shows:
 
-Schema label:
+- local/deterministic share
+- external LLM share
+- token work total
+- direct bypasses
+- deterministic routes
+- local reasoning events
+- LLM events
+- estimated tokens saved
+- local LLM candidate tokens
+- premium candidate tokens
+- top savings run
+- token proof events
 
-```text
-orchgentic.observability.v1
-```
+## Filter Behavior
 
-## Dashboard Reliability Check
+Dashboard filters apply consistently to Recent Runs and Token Intelligence.
 
-Use the observability doctor before release validation:
+When a user filters by status, type, team, agent, or search text, Token Intelligence recalculates from the filtered run set.
 
-```bash
-orch doctor observability
-```
+## Token Proof Rows
 
-The dashboard footer also includes the schema label, generated timestamp, and inspection command hints.
+Token proof rows include:
 
-## Empty dashboard and first-run guidance
+- Run
+- Proof Event
+- Component
+- Meaning
+- Tokens Used
+- Saved
+- Source
+- Execution Tier
+- Optimization
+- Reason
 
-In v0.8.0-beta.2, the dashboard can be generated before any run data exists:
-
-```bash
-orch dashboard
-```
-
-When there are zero runs, the dashboard shows a fresh workspace guidance panel with the recommended first commands:
-
-```bash
-orch tool run datetime.local --agent Bob
-orch doctor observability
-orch dashboard
-orch dashboard --open
-```
-
-`orch dashboard --open` intentionally opens the existing dashboard file without regenerating it. If the dashboard file is missing, run `orch dashboard` first.
-
-## Token Intelligence section
-
-The dashboard includes a Token Intelligence section with local runs, external LLM runs, direct bypasses, deterministic routes, local reasoning events, LLM events, estimated tokens saved, top savings run, and proof events.
-
-This section is designed to support the token-aware operations story: Orchgentic can show when LLM usage was avoided and which trace event proves the estimated savings.
-
-## Token Intelligence modal
-
-In the Token Intelligence section, clicking a Run ID opens a focused token-only modal for that run.
-
-The modal is designed to answer:
-
-```text
-Did this run use an external LLM?
-Was it executed locally?
-How many tokens were reported?
-How many tokens were estimated as saved?
-What token source was used?
-Which proof events support the token story?
-```
-
-For full run inspection, use the regular Run ID links in the Recent Runs or Recent Failures sections.
-
-
-## Dashboard title polish
-
-The main dashboard title is now `DASHBOARD` so the page reads as the overall Orchgentic observability dashboard rather than only a run dashboard.
+Reason text is shown on its own row so long explanations remain readable.

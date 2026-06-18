@@ -193,3 +193,45 @@ def test_sanitize_final_answer_softens_leading_source_claim_without_json_or_spli
     assert "with a source label of Harvard Business Review" in result.answer
     assert "(AR) and virtual reality (VR)" in result.answer
     assert "team's source-labeled research (AR)" not in result.answer
+
+
+def test_team_quality_trace_data_uses_notes_without_warnings_attribute():
+    from orchgentic.orchestration.team_runner import build_team_quality_trace_data
+
+    quality = sanitize_final_answer("Final answer with [link to article or resource]\nKeep this.")
+    data = build_team_quality_trace_data(3, quality)
+
+    assert data["members"] == 3
+    assert data["quality_notes"] == quality.notes
+    assert data["quality_warnings"] == quality.notes
+    assert data["quality"]["removed_placeholder_lines"] >= 1
+
+
+def test_deterministic_team_plan_assigns_known_roles_without_llm():
+    from orchgentic.orchestration.team_runner import build_deterministic_team_plan
+
+    class Team:
+        name = "ContentTeam"
+        orchestrator = "Manager"
+        members = ["Researcher", "Writer", "Reviewer"]
+
+    plan = build_deterministic_team_plan(Team(), "Research data centers")
+
+    assert "Deterministic team plan for ContentTeam" in plan
+    assert "Researcher: gather and verify" in plan
+    assert "Writer: draft" in plan
+    assert "Reviewer: review" in plan
+    assert "Synthesis:" in plan
+
+
+def test_team_member_tool_decision_policy_skips_researcher_writer_and_reviewer():
+    from orchgentic.orchestration.team_runner import tool_decision_policy_for_team_member
+
+    researcher = tool_decision_policy_for_team_member("Researcher")
+    assert researcher["tool_decision_policy"] == "skip"
+    assert researcher["tool_decision_policy_event_name"] == "deterministic_researcher_tool_routing"
+    assert researcher["estimated_tool_decision_iterations_saved"] == 3
+    assert "deterministic research role contract" in researcher["tool_decision_policy_reason"]
+
+    assert tool_decision_policy_for_team_member("Writer")["tool_decision_policy"] == "skip"
+    assert tool_decision_policy_for_team_member("Reviewer")["tool_decision_policy"] == "skip"

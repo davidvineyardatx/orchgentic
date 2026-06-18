@@ -21,6 +21,12 @@ def _safe(value) -> str:
     return escape(str(value))
 
 
+def _pct(part: int, total: int) -> str:
+    if not total:
+        return "0%"
+    return f"{round((int(part or 0) / int(total or 0)) * 100, 1)}%"
+
+
 def _short_id(run_id: str | None) -> str:
     return (run_id or "-")[:8]
 
@@ -36,9 +42,11 @@ def _target(run: RunRecord) -> str:
 
 def _tokens_label(run: RunRecord) -> str:
     if run.total_tokens:
-        return f"tokens={run.total_tokens}, source={run.token_source}"
+        source = run.token_source or "unknown"
+        prefix = "estimated tokens used" if source == "estimated" else "actual tokens used" if source == "actual" else "tokens used"
+        return f"{prefix}={run.total_tokens}, source={source}"
     if run.estimated_tokens_saved:
-        return f"saved≈{run.estimated_tokens_saved}, source={run.token_source}"
+        return f"estimated tokens saved≈{run.estimated_tokens_saved}, source={run.token_source}"
     return f"source={run.token_source}"
 
 
@@ -83,19 +91,25 @@ def _token_intelligence_section(report: dict) -> str:
     if proof_events:
         proof_rows = "".join(
             f"""
-            <tr>
-              <td><button class="run-link run-link-button" type="button" data-token-run-target="{_safe('token-' + _anchor_id(event.get('run_id')))}"><code>{_safe(event.get('run_short_id'))}</code></button></td>
+            <tr data-token-proof-row="true" data-token-run-id="{_safe(event.get('run_id'))}" data-token-run-type="{_safe(event.get('run_type'))}" data-token-target="{_safe(event.get('target'))}" data-token-search="{_safe((event.get('run_id') or '') + ' ' + (event.get('run_type') or '') + ' ' + (event.get('target') or '') + ' ' + (event.get('task') or '') + ' ' + (event.get('reason') or ''))}" data-token-total="{_safe(event.get('total_tokens'))}" data-token-saved="{_safe(event.get('estimated_tokens_saved'))}" data-token-tier="{_safe(event.get('execution_tier'))}" data-token-optimization="{_safe(event.get('optimization_opportunity'))}" data-token-event-type="{_safe(event.get('event_type'))}">
+              <td rowspan="2"><button class="run-link run-link-button" type="button" data-token-run-target="{_safe('token-' + _anchor_id(event.get('run_id')))}"><code>{_safe(event.get('run_short_id'))}</code></button></td>
               <td>{_safe(event.get('event_type'))}</td>
               <td>{_safe(event.get('component'))}</td>
+              <td>{_safe(event.get('token_meaning'))}</td>
+              <td>{_safe(event.get('total_tokens'))}</td>
               <td>{_safe(event.get('estimated_tokens_saved'))}</td>
               <td>{_safe(event.get('token_source'))}</td>
-              <td>{_safe(event.get('reason'))}</td>
+              <td>{_safe(event.get('execution_tier'))}</td>
+              <td>{_safe(event.get('optimization_opportunity'))}</td>
+            </tr>
+            <tr class="token-reason-row" data-token-proof-reason-row="true" data-token-run-id="{_safe(event.get('run_id'))}">
+              <td colspan="8" class="token-reason-cell"><span>Reason:</span> {_safe(event.get('reason'))}</td>
             </tr>
             """
             for event in proof_events[:8]
         )
     else:
-        proof_rows = '<tr><td colspan="6" class="empty">No token proof events yet. Run <code>orch tool run datetime.local --agent Bob</code> to create a direct-tool proof.</td></tr>'
+        proof_rows = '<tr><td colspan="9" class="empty">No token proof events yet. Run <code>orch tool run datetime.local --agent Bob</code> to create a direct-tool proof.</td></tr>'
 
     top_summary = "No saved-token run yet."
     if top:
@@ -106,21 +120,25 @@ def _token_intelligence_section(report: dict) -> str:
         )
 
     return f"""
-      <section class="card section token-intelligence">
-        <div class="section-head">
+      <details open class="card section collapsible-section token-intelligence" id="token-intelligence-panel">
+        <summary class="section-head">
           <h2>Token Intelligence</h2>
           <span class="chip">local reasoning proof</span>
-        </div>
+        </summary>
+        <div class="section-body">
         <p class="muted-block">Shows when Orchgentic avoided external LLM calls, routed locally, and produced estimated token-savings evidence.</p>
         <div class="metadata-grid">
-          <div class="metadata-item"><span>local_runs</span><strong>{_safe(report.get('local_runs', 0))} ({_safe(report.get('local_run_rate', '0%'))})</strong></div>
-          <div class="metadata-item"><span>external_llm_runs</span><strong>{_safe(report.get('external_llm_runs', 0))} ({_safe(report.get('external_llm_rate', '0%'))})</strong></div>
-          <div class="metadata-item"><span>direct_bypasses</span><strong>{_safe(report.get('direct_bypasses', 0))}</strong></div>
-          <div class="metadata-item"><span>deterministic_routes</span><strong>{_safe(report.get('deterministic_routes', 0))}</strong></div>
-          <div class="metadata-item"><span>local_reasoning_events</span><strong>{_safe(report.get('local_reasoning_events', 0))}</strong></div>
-          <div class="metadata-item"><span>llm_events</span><strong>{_safe(report.get('llm_events', 0))}</strong></div>
-          <div class="metadata-item"><span>estimated_tokens_saved</span><strong>{_safe(report.get('estimated_tokens_saved', 0))}</strong></div>
-          <div class="metadata-item"><span>top_savings_run</span><strong>{top_summary}</strong></div>
+          <div class="metadata-item"><span>local/deterministic share</span><strong id="token-local-deterministic-share">{_safe(report.get('local_or_deterministic_token_rate', '0%'))}</strong></div>
+          <div class="metadata-item"><span>external LLM share</span><strong id="token-external-llm-share">{_safe(report.get('external_llm_token_rate', '0%'))}</strong></div>
+          <div class="metadata-item"><span>token_work_total</span><strong id="token-work-total">{_safe(report.get('token_work_total', 0))}</strong></div>
+          <div class="metadata-item"><span>direct_bypasses</span><strong id="token-direct-bypasses">{_safe(report.get('direct_bypasses', 0))}</strong></div>
+          <div class="metadata-item"><span>deterministic_routes</span><strong id="token-deterministic-routes">{_safe(report.get('deterministic_routes', 0))}</strong></div>
+          <div class="metadata-item"><span>local_reasoning_events</span><strong id="token-local-reasoning-events">{_safe(report.get('local_reasoning_events', 0))}</strong></div>
+          <div class="metadata-item"><span>llm_events</span><strong id="token-llm-events">{_safe(report.get('llm_events', 0))}</strong></div>
+          <div class="metadata-item"><span>estimated_tokens_saved</span><strong id="token-estimated-saved">{_safe(report.get('estimated_tokens_saved', 0))}</strong></div>
+          <div class="metadata-item"><span>local_llm_candidate_tokens</span><strong id="token-local-llm-candidate">{_safe(report.get('external_tokens_local_candidate', 0))} ({_safe(report.get('external_tokens_optimization_rate', '0%'))})</strong></div>
+          <div class="metadata-item"><span>premium_candidate_tokens</span><strong id="token-premium-candidate">{_safe(report.get('external_tokens_premium_candidate', 0))}</strong></div>
+          <div class="metadata-item"><span>top_savings_run</span><strong id="token-top-savings-run">{top_summary}</strong></div>
         </div>
         <p class="muted-block"><strong>Note:</strong> {_safe(report.get('token_source_note'))}.</p>
         <table>
@@ -129,16 +147,21 @@ def _token_intelligence_section(report: dict) -> str:
               <th>Run</th>
               <th>Proof Event</th>
               <th>Component</th>
+              <th>Meaning</th>
+              <th>Tokens Used</th>
               <th>Saved</th>
               <th>Source</th>
-              <th>Reason</th>
+              <th>Execution Tier</th>
+              <th>Optimization</th>
             </tr>
           </thead>
           <tbody>
             {proof_rows}
+            <tr id="token-empty-filtered" style="display:none"><td colspan="9" class="dynamic-empty">No token intelligence events match the current run filters.</td></tr>
           </tbody>
         </table>
-      </section>
+        </div>
+      </details>
     """
 
 
@@ -147,7 +170,7 @@ def _run_rows(runs: Iterable[RunRecord]) -> str:
     for run in runs:
         rows.append(
             f"""
-            <tr data-dashboard-row="run" data-status="{_safe(run.status)}" data-type="{_safe(run.run_type)}" data-search="{_safe((run.run_id or '') + ' ' + (run.status or '') + ' ' + (run.run_type or '') + ' ' + _target(run) + ' ' + (run.task or ''))}">
+            <tr data-dashboard-row="run" data-run-id="{_safe(run.run_id)}" data-status="{_safe(run.status)}" data-type="{_safe(run.run_type)}" data-search="{_safe((run.run_id or '') + ' ' + (run.status or '') + ' ' + (run.run_type or '') + ' ' + _target(run) + ' ' + (run.task or ''))}">
               <td><button class="run-link run-link-button" type="button" data-run-target="{_safe(_anchor_id(run.run_id))}"><code>{_safe(_short_id(run.run_id))}</code></button></td>
               <td><span class="pill {_status_class(run.status)}">{_safe(run.status)}</span></td>
               <td>{_safe(run.run_type)}</td>
@@ -222,9 +245,11 @@ def _event_rows(events) -> str:
 
 def _tokens_event_label(event) -> str:
     if getattr(event, "total_tokens", 0):
-        return f"tokens={event.total_tokens}, source={event.token_source}"
+        source = getattr(event, "token_source", None) or "unknown"
+        prefix = "estimated tokens used" if source == "estimated" else "actual tokens used" if source == "actual" else "tokens used"
+        return f"{prefix}={event.total_tokens}, source={source}"
     if getattr(event, "estimated_tokens_saved", 0):
-        return f"saved≈{event.estimated_tokens_saved}, source={event.token_source}"
+        return f"estimated tokens saved≈{event.estimated_tokens_saved}, source={event.token_source}"
     return getattr(event, "token_source", None) or "-"
 
 
@@ -235,6 +260,105 @@ def _is_token_proof_event(event) -> bool:
     return bool(getattr(event, "total_tokens", 0) or getattr(event, "estimated_tokens_saved", 0))
 
 
+def _token_event_meaning(event) -> str:
+    if getattr(event, "total_tokens", 0):
+        return "tokens used"
+    if getattr(event, "estimated_tokens_saved", 0):
+        return "tokens saved"
+    return "proof/context"
+
+
+def _event_local_llm_eligible(event) -> bool:
+    data = getattr(event, "data", None) or {}
+    if data.get("local_llm_eligible") is not None:
+        return bool(data.get("local_llm_eligible"))
+    if not int(getattr(event, "total_tokens", 0) or 0):
+        return False
+    purpose = str(data.get("llm_purpose") or getattr(event, "name", None) or "").lower()
+    role = str(data.get("team_role") or data.get("role") or "").lower()
+    agent = str(data.get("agent_name") or data.get("agent_id") or "").lower()
+    if purpose in {"tool_decision", "routing", "planning", "quality_review"}:
+        return True
+    if role in {"member", "researcher", "writer", "reviewer"}:
+        return True
+    if any(marker in agent for marker in ["research", "writer", "review"]):
+        return True
+    return False
+
+
+def _token_execution_tier(event) -> str:
+    if int(getattr(event, "estimated_tokens_saved", 0) or 0):
+        return "deterministic saved"
+    if not int(getattr(event, "total_tokens", 0) or 0):
+        return "proof/context"
+    data = getattr(event, "data", None) or {}
+    explicit = data.get("execution_tier") or data.get("recommended_execution_tier")
+    if explicit:
+        return str(explicit).replace("_", " ")
+    role = str(data.get("team_role") or data.get("role") or "").lower()
+    purpose = str(data.get("llm_purpose") or getattr(event, "name", None) or "").lower()
+    if role == "synthesis" or "synthesis" in purpose:
+        return "premium external candidate"
+    if _event_local_llm_eligible(event):
+        return "local LLM candidate"
+    return "external LLM"
+
+
+def _token_optimization_opportunity(event) -> str:
+    data = getattr(event, "data", None) or {}
+    if data.get("optimization_opportunity"):
+        return str(data.get("optimization_opportunity")).replace("_", " ")
+    tier = _token_execution_tier(event)
+    if tier == "deterministic saved":
+        return "already avoided external LLM"
+    if tier == "local LLM candidate":
+        return "move to local LLM"
+    if tier == "premium external candidate":
+        return "keep external or make configurable"
+    if tier == "proof/context":
+        return "none"
+    return "monitor"
+
+
+def _token_event_reason(event) -> str:
+    data = getattr(event, "data", None) or {}
+    explicit_reason = data.get("token_work_reason") or data.get("reason")
+    if explicit_reason:
+        reason = explicit_reason
+    elif getattr(event, "message", None):
+        reason = event.message
+    elif str(getattr(event, "event_type", "") or "").startswith("llm."):
+        purpose = data.get("llm_purpose") or getattr(event, "name", None) or "LLM call"
+        actor = data.get("agent_name") or data.get("agent_id") or "agent"
+        team = data.get("team")
+        role = data.get("team_role") or data.get("role")
+        scope = actor
+        if team:
+            scope += f" / team={team}"
+        if role:
+            scope += f" / role={role}"
+        reason = f"LLM tokens used by {scope} for {purpose}."
+    elif getattr(event, "estimated_tokens_saved", 0):
+        reason = data.get("savings_reason") or data.get("reason") or "Estimated tokens saved by local/direct routing."
+    else:
+        reason = data.get("reason") or data.get("llm_purpose") or "Trace event included for token proof context."
+
+    source_reason = data.get("token_count_source_reason")
+    if source_reason and getattr(event, "total_tokens", 0):
+        reason = f"{reason} Count source: {source_reason}."
+    return reason
+
+
+def _token_modal_note(run: RunRecord) -> str:
+    if int(run.estimated_tokens_saved or 0) > 0:
+        return "Estimated token savings are operational estimates of avoided LLM routing/execution overhead, not billing claims."
+    if int(run.total_tokens or 0) > 0 and (run.token_source or "") == "estimated":
+        return "Token usage is estimated because exact provider usage metadata was not available for one or more LLM calls in this runtime path."
+    if int(run.total_tokens or 0) > 0:
+        return "Token usage reflects provider-reported or runtime-recorded token counts for this run."
+    return "No external LLM tokens were recorded for this run."
+
+
 def _token_proof_event_rows(events) -> str:
     rows = []
     for event in events:
@@ -243,17 +367,22 @@ def _token_proof_event_rows(events) -> str:
         rows.append(
             f"""
             <tr>
-              <td>{_safe(event.event_type)}</td>
+              <td rowspan="2">{_safe(event.event_type)}</td>
               <td>{_safe(event.component)}</td>
               <td>{_safe(event.name)}</td>
+              <td>{_safe(_token_event_meaning(event))}</td>
               <td>{_safe(event.total_tokens or 0)}</td>
               <td>{_safe(event.estimated_tokens_saved or 0)}</td>
               <td>{_safe(event.token_source)}</td>
-              <td>{_safe(event.message)}</td>
+              <td>{_safe(_token_execution_tier(event))}</td>
+              <td>{_safe(_token_optimization_opportunity(event))}</td>
+            </tr>
+            <tr class="token-reason-row">
+              <td colspan="8" class="token-reason-cell"><span>Reason:</span> {_safe(_token_event_reason(event))}</td>
             </tr>
             """
         )
-    return "\n".join(rows) if rows else '<tr><td colspan="7" class="empty">No token proof events found for this run.</td></tr>'
+    return "\n".join(rows) if rows else '<tr><td colspan="9" class="empty">No token proof events found for this run.</td></tr>'
 
 
 def _run_detail_sections(store: ObservabilityStore, runs: Iterable[RunRecord]) -> str:
@@ -361,6 +490,11 @@ def _modal_token_detail_templates(store: ObservabilityStore, runs: Iterable[RunR
     for run in runs:
         events = store.list_events(run.run_id)
         token_proof_count = sum(1 for event in events if _is_token_proof_event(event))
+        local_candidate_tokens = sum(int(getattr(event, "total_tokens", 0) or 0) for event in events if _token_optimization_opportunity(event) == "move to local LLM")
+        premium_candidate_tokens = sum(int(getattr(event, "total_tokens", 0) or 0) for event in events if _token_execution_tier(event) == "premium external candidate")
+        token_work_total = int(run.total_tokens or 0) + int(run.estimated_tokens_saved or 0)
+        local_or_deterministic_rate = _pct(int(run.estimated_tokens_saved or 0), token_work_total)
+        external_llm_rate = _pct(int(run.total_tokens or 0), token_work_total)
         local_execution = not bool(run.external_llm_used)
         templates.append(
             f"""
@@ -370,17 +504,22 @@ def _modal_token_detail_templates(store: ObservabilityStore, runs: Iterable[RunR
                   <div><span>run_id</span><strong>{_safe(run.run_id)}</strong></div>
                   <div><span>external_llm_used</span><strong>{_safe(bool(run.external_llm_used))}</strong></div>
                   <div><span>local_execution</span><strong>{_safe(local_execution)}</strong></div>
+                  <div><span>local/deterministic share</span><strong>{_safe(local_or_deterministic_rate)}</strong></div>
+                  <div><span>external LLM share</span><strong>{_safe(external_llm_rate)}</strong></div>
+                  <div><span>token_work_total</span><strong>{_safe(token_work_total)}</strong></div>
                   <div><span>provider used</span><strong>{_safe(_provider_used_label(run))}</strong></div>
                   <div><span>configured provider</span><strong>{_safe(_configured_provider_label(run))}</strong></div>
                   <div><span>input_tokens</span><strong>{_safe(run.input_tokens or 0)}</strong></div>
                   <div><span>output_tokens</span><strong>{_safe(run.output_tokens or 0)}</strong></div>
                   <div><span>total_tokens</span><strong>{_safe(run.total_tokens or 0)}</strong></div>
                   <div><span>estimated_tokens_saved</span><strong>{_safe(run.estimated_tokens_saved or 0)}</strong></div>
-                  <div><span>token_source</span><strong>{_safe(run.token_source)}</strong></div>
+                  <div><span>token_count_source</span><strong>{_safe(run.token_source)}</strong></div>
+                  <div><span>local_llm_candidate_tokens</span><strong>{_safe(local_candidate_tokens)}</strong></div>
+                  <div><span>premium_candidate_tokens</span><strong>{_safe(premium_candidate_tokens)}</strong></div>
                   <div><span>token_proof_events</span><strong>{_safe(token_proof_count)}</strong></div>
                 </div>
 
-                <p class="muted-block"><strong>Note:</strong> estimated token savings are operational estimates of avoided LLM routing/execution overhead, not billing claims.</p>
+                <p class="muted-block"><strong>Note:</strong> {_safe(_token_modal_note(run))}</p>
 
                 <table>
                   <thead>
@@ -388,11 +527,13 @@ def _modal_token_detail_templates(store: ObservabilityStore, runs: Iterable[RunR
                       <th>Proof Event</th>
                       <th>Component</th>
                       <th>Name</th>
-                      <th>Total Tokens</th>
+                      <th>Token Meaning</th>
+                      <th>Tokens Used</th>
                       <th>Saved</th>
-                      <th>Source</th>
-                      <th>Reason</th>
-                    </tr>
+                      <th>Count Source</th>
+                      <th>Execution Tier</th>
+                      <th>Optimization</th>
+                            </tr>
                   </thead>
                   <tbody>
                     {_token_proof_event_rows(events)}
@@ -424,9 +565,16 @@ def _run_detail_metadata_script(runs: Iterable[RunRecord]) -> str:
     return json.dumps(items)
 
 
-def _token_detail_metadata_script(runs: Iterable[RunRecord]) -> str:
+def _token_detail_metadata_script(store: ObservabilityStore, runs: Iterable[RunRecord]) -> str:
     items = []
     for run in runs:
+        try:
+            events = store.list_events(run.run_id)
+        except Exception:  # pragma: no cover - defensive dashboard fallback
+            events = []
+        local_candidate_tokens = sum(int(getattr(event, "total_tokens", 0) or 0) for event in events if _token_optimization_opportunity(event) == "move to local LLM")
+        premium_candidate_tokens = sum(int(getattr(event, "total_tokens", 0) or 0) for event in events if _token_execution_tier(event) == "premium external candidate")
+        search_text = " ".join([run.run_id or "", run.status or "", run.run_type or "", _target(run), run.task or ""]).lower()
         items.append({
             "id": "token-" + _anchor_id(run.run_id),
             "short_id": _short_id(run.run_id),
@@ -434,10 +582,13 @@ def _token_detail_metadata_script(runs: Iterable[RunRecord]) -> str:
             "target": _target(run),
             "status": run.status or "",
             "run_type": run.run_type or "",
+            "search": search_text,
             "tokens": _tokens_label(run),
             "external_llm_used": bool(run.external_llm_used),
             "estimated_tokens_saved": int(run.estimated_tokens_saved or 0),
             "total_tokens": int(run.total_tokens or 0),
+            "local_candidate_tokens": local_candidate_tokens,
+            "premium_candidate_tokens": premium_candidate_tokens,
             "token_source": run.token_source or "",
             "run_info_command": f"orch run-info {run.run_id}",
             "trace_command": f"orch trace {run.run_id}",
@@ -446,9 +597,9 @@ def _token_detail_metadata_script(runs: Iterable[RunRecord]) -> str:
     return json.dumps(items)
 
 
-def _modal_script(runs: Iterable[RunRecord]) -> str:
+def _modal_script(store: ObservabilityStore, runs: Iterable[RunRecord]) -> str:
     run_details = _run_detail_metadata_script(runs)
-    token_details = _token_detail_metadata_script(runs)
+    token_details = _token_detail_metadata_script(store, runs)
     script = """
   <script>
     (function () {
@@ -568,6 +719,7 @@ def _modal_script(runs: Iterable[RunRecord]) -> str:
       var visibleRunCount = document.getElementById("visible-run-count");
       var metadataVisibleRunCount = document.getElementById("metadata-visible-run-count");
       var filteredEmptyRow = document.getElementById("runs-empty-filtered");
+      var tokenEmptyFilteredRow = document.getElementById("token-empty-filtered");
       var pageSizeSelect = document.getElementById("page-size-select");
       var pageFirst = document.getElementById("page-first");
       var pagePrev = document.getElementById("page-prev");
@@ -584,23 +736,133 @@ def _modal_script(runs: Iterable[RunRecord]) -> str:
         return isNaN(parsed) || parsed <= 0 ? 50 : parsed;
       }
 
+      function percent(part, total) {
+        if (!total) return "0%";
+        return (Math.round((part / total) * 1000) / 10).toFixed(1).replace(".0", ".0") + "%";
+      }
+
+      function setText(id, value) {
+        var element = document.getElementById(id);
+        if (element) element.textContent = String(value);
+      }
+
+      function runMatchesCurrentFilters(row, query) {
+        var searchText = (row.getAttribute("data-search") || "").toLowerCase();
+        var status = row.getAttribute("data-status") || "";
+        var type = row.getAttribute("data-type") || "";
+        var matchesSearch = !query || searchText.indexOf(query) !== -1;
+        var matchesQuickFilter =
+          activeFilter.kind === "all" ||
+          (activeFilter.kind === "status" && status === activeFilter.value) ||
+          (activeFilter.kind === "type" && type === activeFilter.value);
+        return matchesSearch && matchesQuickFilter;
+      }
+
+      function applyTokenIntelligenceFilters(matchingRows) {
+        var matchingIds = {};
+        matchingRows.forEach(function (row) {
+          var runId = row.getAttribute("data-run-id") || "";
+          if (runId) matchingIds[runId] = true;
+        });
+
+        var filteredTokenDetails = tokenDetails.filter(function (item) {
+          return !!matchingIds[item.run_id];
+        });
+
+        var totalTokens = 0;
+        var estimatedSaved = 0;
+        var localCandidate = 0;
+        var premiumCandidate = 0;
+        var topSavings = null;
+
+        filteredTokenDetails.forEach(function (item) {
+          var tokens = Number(item.total_tokens || 0);
+          var saved = Number(item.estimated_tokens_saved || 0);
+          totalTokens += tokens;
+          estimatedSaved += saved;
+          localCandidate += Number(item.local_candidate_tokens || 0);
+          premiumCandidate += Number(item.premium_candidate_tokens || 0);
+          if (saved > 0 && (!topSavings || saved > Number(topSavings.estimated_tokens_saved || 0))) {
+            topSavings = item;
+          }
+        });
+
+        var tokenWorkTotal = totalTokens + estimatedSaved;
+        setText("token-local-deterministic-share", percent(estimatedSaved, tokenWorkTotal));
+        setText("token-external-llm-share", percent(totalTokens, tokenWorkTotal));
+        setText("token-work-total", tokenWorkTotal);
+        setText("token-estimated-saved", estimatedSaved);
+        setText("token-local-llm-candidate", localCandidate + " (" + percent(localCandidate, totalTokens) + ")");
+        setText("token-premium-candidate", premiumCandidate);
+
+        if (topSavings) {
+          var topElement = document.getElementById("token-top-savings-run");
+          if (topElement) {
+            topElement.textContent = "";
+            topElement.appendChild(document.createTextNode("run "));
+
+            var runButton = document.createElement("button");
+            runButton.className = "run-link run-link-button";
+            runButton.type = "button";
+            runButton.setAttribute("data-token-run-target", topSavings.id);
+            runButton.addEventListener("click", function () { openTokenModal(topSavings.id); });
+
+            var code = document.createElement("code");
+            code.textContent = topSavings.short_id || "";
+            runButton.appendChild(code);
+            topElement.appendChild(runButton);
+
+            topElement.appendChild(document.createTextNode(
+              " · " + (topSavings.target || "") +
+              " · saved≈" + (topSavings.estimated_tokens_saved || 0) +
+              " · external_llm_used=" + topSavings.external_llm_used
+            ));
+          }
+        } else {
+          setText("token-top-savings-run", "No saved-token run for current filters.");
+        }
+
+        var visibleTokenRows = 0;
+        var directBypasses = 0;
+        var deterministicRoutes = 0;
+        var llmEvents = 0;
+        var localReasoningEvents = 0;
+        document.querySelectorAll("[data-token-proof-row]").forEach(function (row) {
+          var runId = row.getAttribute("data-token-run-id") || "";
+          var shouldShow = !!matchingIds[runId];
+          row.style.display = shouldShow ? "" : "none";
+          if (!shouldShow) return;
+          visibleTokenRows += 1;
+          var eventType = row.getAttribute("data-token-event-type") || "";
+          var tier = row.getAttribute("data-token-tier") || "";
+          if (eventType === "routing.bypassed") directBypasses += 1;
+          if (tier === "deterministic_saved") deterministicRoutes += 1;
+          if (eventType.indexOf("llm.") === 0) llmEvents += 1;
+          if (eventType === "reasoning.completed") localReasoningEvents += 1;
+        });
+
+        document.querySelectorAll("[data-token-proof-reason-row]").forEach(function (row) {
+          var runId = row.getAttribute("data-token-run-id") || "";
+          row.style.display = matchingIds[runId] ? "" : "none";
+        });
+
+        setText("token-direct-bypasses", directBypasses);
+        setText("token-deterministic-routes", deterministicRoutes);
+        setText("token-local-reasoning-events", localReasoningEvents);
+        setText("token-llm-events", llmEvents);
+
+        if (tokenEmptyFilteredRow) {
+          tokenEmptyFilteredRow.style.display = visibleTokenRows === 0 ? "" : "none";
+        }
+      }
+
       function applyDashboardFilters() {
         var query = dashboardSearch ? dashboardSearch.value.toLowerCase().trim() : "";
         var matchingRows = [];
         var allRows = Array.prototype.slice.call(document.querySelectorAll("[data-dashboard-row='run']"));
 
         allRows.forEach(function (row) {
-          var searchText = (row.getAttribute("data-search") || "").toLowerCase();
-          var status = row.getAttribute("data-status") || "";
-          var type = row.getAttribute("data-type") || "";
-
-          var matchesSearch = !query || searchText.indexOf(query) !== -1;
-          var matchesQuickFilter =
-            activeFilter.kind === "all" ||
-            (activeFilter.kind === "status" && status === activeFilter.value) ||
-            (activeFilter.kind === "type" && type === activeFilter.value);
-
-          if (matchesSearch && matchesQuickFilter) matchingRows.push(row);
+          if (runMatchesCurrentFilters(row, query)) matchingRows.push(row);
         });
 
         var matchingCount = matchingRows.length;
@@ -612,13 +874,8 @@ def _modal_script(runs: Iterable[RunRecord]) -> str:
         var startIndex = pageSize === Infinity ? 0 : (currentPage - 1) * pageSize;
         var endIndex = pageSize === Infinity ? matchingCount : Math.min(startIndex + pageSize, matchingCount);
 
-        allRows.forEach(function (row) {
-          row.style.display = "none";
-        });
-
-        matchingRows.slice(startIndex, endIndex).forEach(function (row) {
-          row.style.display = "";
-        });
+        allRows.forEach(function (row) { row.style.display = "none"; });
+        matchingRows.slice(startIndex, endIndex).forEach(function (row) { row.style.display = ""; });
 
         if (visibleRunCount) visibleRunCount.textContent = matchingCount;
         if (metadataVisibleRunCount) metadataVisibleRunCount.textContent = matchingCount;
@@ -642,12 +899,16 @@ def _modal_script(runs: Iterable[RunRecord]) -> str:
         if (pagePrev) pagePrev.disabled = disableBack;
         if (pageNext) pageNext.disabled = disableForward;
         if (pageLast) pageLast.disabled = disableForward;
+
+        applyTokenIntelligenceFilters(matchingRows);
       }
 
       if (dashboardSearch) {
         dashboardSearch.addEventListener("input", function () {
           currentPage = 1;
-    
+          applyDashboardFilters();
+        });
+      }
       if (pageSizeSelect) {
         pageSizeSelect.addEventListener("change", function () {
           currentPage = 1;
@@ -675,28 +936,11 @@ def _modal_script(runs: Iterable[RunRecord]) -> str:
       if (pageLast) {
         pageLast.addEventListener("click", function () {
           var pageSize = selectedPageSize();
-          var matchingCount = Array.prototype.slice.call(document.querySelectorAll("[data-dashboard-row='run']")).filter(function (row) {
-            return row.style.display !== "none" || true;
-          }).length;
           var query = dashboardSearch ? dashboardSearch.value.toLowerCase().trim() : "";
           var allRows = Array.prototype.slice.call(document.querySelectorAll("[data-dashboard-row='run']"));
-          var filteredCount = allRows.filter(function (row) {
-            var searchText = (row.getAttribute("data-search") || "").toLowerCase();
-            var status = row.getAttribute("data-status") || "";
-            var type = row.getAttribute("data-type") || "";
-            var matchesSearch = !query || searchText.indexOf(query) !== -1;
-            var matchesQuickFilter =
-              activeFilter.kind === "all" ||
-              (activeFilter.kind === "status" && status === activeFilter.value) ||
-              (activeFilter.kind === "type" && type === activeFilter.value);
-            return matchesSearch && matchesQuickFilter;
-          }).length;
+          var filteredCount = allRows.filter(function (row) { return runMatchesCurrentFilters(row, query); }).length;
           currentPage = pageSize === Infinity ? 1 : Math.max(1, Math.ceil(filteredCount / pageSize));
           applyDashboardFilters();
-        });
-      }
-
-      applyDashboardFilters();
         });
       }
 
@@ -714,7 +958,6 @@ def _modal_script(runs: Iterable[RunRecord]) -> str:
       });
 
       applyDashboardFilters();
-
 
       document.querySelectorAll("[data-run-target]").forEach(function (control) {
         control.addEventListener("click", function () {
@@ -763,9 +1006,11 @@ def _modal_script(runs: Iterable[RunRecord]) -> str:
 
 def _tokens_event_label(event) -> str:
     if getattr(event, "total_tokens", 0):
-        return f"tokens={event.total_tokens}, source={event.token_source}"
+        source = getattr(event, "token_source", None) or "unknown"
+        prefix = "estimated tokens used" if source == "estimated" else "actual tokens used" if source == "actual" else "tokens used"
+        return f"{prefix}={event.total_tokens}, source={source}"
     if getattr(event, "estimated_tokens_saved", 0):
-        return f"saved≈{event.estimated_tokens_saved}, source={event.token_source}"
+        return f"estimated tokens saved≈{event.estimated_tokens_saved}, source={event.token_source}"
     return getattr(event, "token_source", None) or "-"
 
 
@@ -973,6 +1218,33 @@ def build_dashboard_html(
       gap: 16px;
       margin-bottom: 14px;
     }}
+    details.section {{ padding: 0; }}
+    details.section > summary.section-head {{
+      cursor: pointer;
+      list-style: none;
+      padding: 18px;
+      margin-bottom: 0;
+      border-radius: 18px 18px 0 0;
+    }}
+    details.section > summary.section-head::-webkit-details-marker {{ display: none; }}
+    details.section > summary.section-head::after {{
+      content: "Collapse";
+      color: var(--muted);
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      margin-left: auto;
+    }}
+    details.section:not([open]) > summary.section-head::after {{ content: "Expand"; }}
+    details.section > summary.section-head:hover::after {{
+      color: var(--orange);
+      border-color: rgba(255, 138, 31, .55);
+      background: rgba(255, 138, 31, .10);
+    }}
+    .section-body {{ padding: 0 18px 18px; }}
     h2 {{ margin: 0; font-size: 18px; }}
     .chips {{ display: flex; flex-wrap: wrap; gap: 8px; }}
     .chip {{
@@ -1004,6 +1276,27 @@ def build_dashboard_html(
       color: #d7dce5;
       font-size: 13px;
       vertical-align: top;
+    }}
+
+    .token-reason-row td {{
+      padding-top: 0;
+      border-top: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }}
+    .token-reason-cell {{
+      background: rgba(255,255,255,.018);
+      border-left: 2px solid rgba(255, 138, 31, .35);
+      overflow-wrap: anywhere;
+    }}
+    .token-reason-cell span {{
+      color: #ffd6ad;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin-right: 6px;
+      font-size: 11px;
     }}
     code {{
       color: #ffd6ad;
@@ -1277,6 +1570,94 @@ def build_dashboard_html(
         {_metric_card("Failures", failed, f"{failure_stats.get("total_failures", 0)} failed run(s)")}
       </div>
 
+      <details open class="card section collapsible-section" id="recent-failures-panel">
+        <summary class="section-head">
+          <h2>Recent Failures</h2>
+          <span class="chip danger">diagnostics</span>
+        </summary>
+        <div class="section-body">
+        <table>
+          <thead>
+            <tr>
+              <th>Run</th>
+              <th>Type</th>
+              <th>Agent / Team</th>
+              <th>Error Type</th>
+              <th>Summary</th>
+            </tr>
+          </thead>
+          <tbody>
+            {_failure_rows(failures)}
+          </tbody>
+        </table>
+        </div>
+      </details>
+
+      <details open class="card section collapsible-section" id="recent-runs-panel">
+        <summary class="section-head">
+          <h2>Recent Runs</h2>
+          <div class="chips">
+            <span class="chip">visible: <strong id="visible-run-count">{_safe(len(runs))}</strong></span>
+            <span class="chip">limit: <strong>{_safe(limit)}</strong></span>
+          </div>
+        </summary>
+        <div class="section-body">
+          <div class="dashboard-controls" aria-label="Dashboard table controls">
+            <input id="dashboard-search" class="dashboard-search" type="search" placeholder="Search runs by id, status, type, agent/team, or task..." />
+            <div class="quick-filters" aria-label="Quick filters">
+              <button class="filter-button active" type="button" data-filter-kind="all" data-filter-value="all">All</button>
+              <button class="filter-button" type="button" data-filter-kind="status" data-filter-value="completed">Completed</button>
+              <button class="filter-button" type="button" data-filter-kind="status" data-filter-value="failed">Failed</button>
+              <button class="filter-button" type="button" data-filter-kind="status" data-filter-value="hold_for_confirmation">Holds</button>
+              <button class="filter-button" type="button" data-filter-kind="type" data-filter-value="tool">Tool</button>
+              <button class="filter-button" type="button" data-filter-kind="type" data-filter-value="agent">Agent</button>
+              <button class="filter-button" type="button" data-filter-kind="type" data-filter-value="team">Team</button>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Run</th>
+                <th>Status</th>
+                <th>Type</th>
+                <th>Agent / Team</th>
+                <th>Tokens</th>
+                <th>Task</th>
+                <th>Started</th>
+              </tr>
+            </thead>
+            <tbody>
+              {_run_rows(runs)}
+              <tr id="runs-empty-filtered" style="display:none"><td colspan="7" class="dynamic-empty">No runs match the current search or quick filter. Clear the search box or choose All to show loaded runs again.</td></tr>
+            </tbody>
+          </table>
+          <div class="pagination-controls">
+            <div>
+              <strong id="pagination-range">Showing 0–0 of 0 matching runs</strong>
+              <span class="row-count"> · loaded {_safe(loaded_runs_count)} run(s)</span>
+            </div>
+            <div class="pagination-actions">
+              <label for="page-size-select">Page size</label>
+              <select id="page-size-select" class="page-size-select">
+                <option value="25">25</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+                <option value="all">All</option>
+              </select>
+              <button class="page-button" type="button" id="page-first">First</button>
+              <button class="page-button" type="button" id="page-prev">Previous</button>
+              <span id="page-label">Page 1 of 1</span>
+              <button class="page-button" type="button" id="page-next">Next</button>
+              <button class="page-button" type="button" id="page-last">Last</button>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      {_token_intelligence_section(token_report)}
+
+      {first_run_guidance}
+
       <div class="two-col">
         <section class="card section">
           <div class="section-head">
@@ -1310,90 +1691,6 @@ def build_dashboard_html(
           <div class="metadata-item"><span>matching_runs</span><strong id="metadata-visible-run-count">{_safe(loaded_runs_count)}</strong></div>
           <div class="metadata-item"><span>success_rate</span><strong>{_safe(success_rate)}</strong></div>
         </div>
-      </section>
-
-      {_token_intelligence_section(token_report)}
-
-      {first_run_guidance}
-
-      <section class="card section">
-        <div class="section-head">
-          <h2>Recent Runs</h2>
-          <div class="chips">
-            <span class="chip">visible: <strong id="visible-run-count">{_safe(len(runs))}</strong></span>
-            <span class="chip">limit: <strong>{_safe(limit)}</strong></span>
-          </div>
-        </div>
-        <div class="dashboard-controls" aria-label="Dashboard table controls">
-          <input id="dashboard-search" class="dashboard-search" type="search" placeholder="Search runs by id, status, type, agent/team, or task..." />
-          <div class="quick-filters" aria-label="Quick filters">
-            <button class="filter-button active" type="button" data-filter-kind="all" data-filter-value="all">All</button>
-            <button class="filter-button" type="button" data-filter-kind="status" data-filter-value="completed">Completed</button>
-            <button class="filter-button" type="button" data-filter-kind="status" data-filter-value="failed">Failed</button>
-            <button class="filter-button" type="button" data-filter-kind="status" data-filter-value="hold_for_confirmation">Holds</button>
-            <button class="filter-button" type="button" data-filter-kind="type" data-filter-value="tool">Tool</button>
-            <button class="filter-button" type="button" data-filter-kind="type" data-filter-value="agent">Agent</button>
-            <button class="filter-button" type="button" data-filter-kind="type" data-filter-value="team">Team</button>
-          </div>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Run</th>
-              <th>Status</th>
-              <th>Type</th>
-              <th>Agent / Team</th>
-              <th>Tokens</th>
-              <th>Task</th>
-              <th>Started</th>
-            </tr>
-          </thead>
-          <tbody>
-            {_run_rows(runs)}
-            <tr id="runs-empty-filtered" style="display:none"><td colspan="7" class="dynamic-empty">No runs match the current search or quick filter. Clear the search box or choose All to show loaded runs again.</td></tr>
-          </tbody>
-        </table>
-        <div class="pagination-controls">
-          <div>
-            <strong id="pagination-range">Showing 0–0 of 0 matching runs</strong>
-            <span class="row-count"> · loaded {_safe(loaded_runs_count)} run(s)</span>
-          </div>
-          <div class="pagination-actions">
-            <label for="page-size-select">Page size</label>
-            <select id="page-size-select" class="page-size-select">
-              <option value="25">25</option>
-              <option value="50" selected>50</option>
-              <option value="100">100</option>
-              <option value="all">All</option>
-            </select>
-            <button class="page-button" type="button" id="page-first">First</button>
-            <button class="page-button" type="button" id="page-prev">Previous</button>
-            <span id="page-label">Page 1 of 1</span>
-            <button class="page-button" type="button" id="page-next">Next</button>
-            <button class="page-button" type="button" id="page-last">Last</button>
-          </div>
-        </div>
-      </section>
-
-      <section class="card section">
-        <div class="section-head">
-          <h2>Recent Failures</h2>
-          <span class="chip danger">diagnostics</span>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Run</th>
-              <th>Type</th>
-              <th>Agent / Team</th>
-              <th>Error Type</th>
-              <th>Summary</th>
-            </tr>
-          </thead>
-          <tbody>
-            {_failure_rows(failures)}
-          </tbody>
-        </table>
       </section>
 
       <div id="run-detail-templates" hidden>
@@ -1434,7 +1731,7 @@ def build_dashboard_html(
     </footer>
   </div>
 
-  {_modal_script(runs)}
+  {_modal_script(store, runs)}
 
 </body>
 </html>

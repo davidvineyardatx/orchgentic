@@ -1,151 +1,57 @@
 # Observability Examples
 
-## Inspect Recent Runs
-
-```bash
-orch runs --limit 10
-```
-
-## Inspect a Run
-
-```bash
-orch run-info <run_id>
-```
-
-## Inspect Trace Events
-
-```bash
-orch trace <run_id>
-orch trace <run_id> --tokens
-orch trace <run_id> --component tool
-orch trace <run_id> --type policy.checked
-```
-
-## Export One Run
-
-```bash
-orch export-run <run_id> --output exports/run.json
-```
-
-## Export Run History
-
-```bash
-orch export-runs --limit 100 --output exports/runs.jsonl
-```
-
-## Generate and Open Dashboard
-
-```bash
-orch dashboard
-orch dashboard --open
-```
-
-## Generate a Team Dashboard
-
-```bash
-orch dashboard --team ContentTeam
-orch dashboard --open
-```
-
-## Generate an Agent Dashboard
-
-```bash
-orch dashboard --agent Bob
-orch dashboard --open
-```
-
-## Generate a Larger Dashboard for Pagination
-
-```bash
-orch dashboard --limit 500
-orch dashboard --open
-```
-
-Then use browser-side controls:
-
-```text
-Page size
-First / Previous / Next / Last
-Search
-Quick filters
-```
-
-## Search Example
-
-Use the dashboard search box to find:
-
-```text
-bob
-ContentTeam
-failed
-tool
-gmail
-datetime.local
-```
-
-## Modal Follow-Up Workflow
-
-Click a Run ID, then copy one of:
-
-```bash
-orch run-info <run_id>
-orch trace <run_id>
-orch export-run <run_id> --output exports/run-<short_id>.json
-```
-
-## Empty State Example
-
-If a search hides all loaded rows, the dashboard shows:
-
-```text
-No runs match the current search or quick filter.
-```
-
-Clear the search box or choose `All` to restore loaded rows.
-
-## Doctor Example
-
-```bash
-orch doctor observability
-```
-
-Example empty output:
-
-```text
-OBSERVABILITY DOCTOR
-schema: orchgentic.observability.v1
-status: empty
-runs: 0
-events: 0
-hint: Run `orch run Bob` or `orch tool run datetime.local --agent Bob` to create trace data.
-```
-
-## Token intelligence example
+## Prove Deterministic Tool Savings
 
 ```bash
 orch tool run datetime.local --agent Bob
 orch token-report
-orch trace <run_id> --tokens
+orch dashboard --open
 ```
 
-Expected proof event:
+Expected story:
 
 ```text
-routing.bypassed (routing/direct_tool) saved≈349, source=estimated - Direct tool execution bypassed LLM routing.
+No external LLM was needed.
+The tool was routed directly.
+Estimated external LLM routing overhead was avoided.
+The trace contains proof.
 ```
 
-## Inspect token proof from the dashboard
+## Prove Team Routing Savings
 
 ```bash
-orch tool run datetime.local --agent Bob
+orch run-team contentteam --debug
+orch token-report
 orch dashboard --limit 500
 orch dashboard --open
 ```
 
-In the dashboard:
+Expected story:
 
-1. Open the Token Intelligence section.
-2. Click the Run ID in the proof events table.
-3. Review the token-only modal for that specific run.
+```text
+Basic team role routing was deterministic.
+Manager planning did not require an external LLM.
+Researcher tool-decision loops were bypassed.
+Writer, Reviewer, and Synthesis tool-decision calls were bypassed.
+External LLM usage was focused on content generation, review, or synthesis.
+```
 
-The modal shows token fields such as `external_llm_used`, `local_execution`, `total_tokens`, `estimated_tokens_saved`, `token_source`, and token proof events.
+## Read the Token Intelligence Split
+
+Example interpretation:
+
+```text
+local/deterministic share: 50.6%
+external LLM share: 49.4%
+estimated tokens saved: 15,850
+local LLM candidate tokens: 8,670
+premium candidate tokens: 6,829
+```
+
+Meaning:
+
+```text
+Orchgentic already avoided 15,850 estimated external tokens.
+8,670 remaining external tokens may be local LLM candidates.
+6,829 remaining external tokens are premium/configurable candidates.
+```
