@@ -1,0 +1,232 @@
+workflow:
+  id: content_intelligence_summary
+  name: Content Intelligence Summary
+  version: 0.1.0
+  status: blueprint
+  description: >
+    Token-aware research, drafting, review, and synthesis workflow for producing
+    executive summaries with deterministic team routing, local-first decision
+    policy, Token Intelligence proof, and premium/configurable final synthesis.
+
+  purpose: >
+    Demonstrate Orchgentic's cost-aware orchestration model: avoid external LLM
+    calls for basic team planning and tool-decision work, classify remaining
+    external usage for local LLM offload, and reserve premium model usage for
+    high-value generation or final synthesis.
+
+  inputs:
+    task:
+      type: string
+      required: true
+      description: User request, topic, or business question to research and summarize.
+    audience:
+      type: string
+      required: false
+      default: executive
+      description: Intended audience for the summary.
+    output_style:
+      type: string
+      required: false
+      default: executive_summary
+      description: Desired output style.
+    require_verifiable_sources:
+      type: boolean
+      required: false
+      default: true
+      description: Whether research should prefer verifiable information.
+
+  team:
+    id: contentteam
+    name: ContentTeam
+    orchestrator: Manager
+    members:
+      - Researcher
+      - Writer
+      - Reviewer
+    shared_context: true
+    max_rounds: 3
+
+  execution_policy:
+    default_mode: external_llm_when_needed
+    manager_planning:
+      mode: deterministic
+      estimated_external_tokens_saved: true
+      reason: >
+        Known team roles can be assigned from team configuration without asking
+        an external LLM to plan basic orchestration.
+
+    researcher_tool_decision:
+      mode: deterministic
+      estimated_external_tokens_saved: true
+      local_llm_eligible: true
+      reason: >
+        Researcher should follow the deterministic research role contract instead
+        of repeatedly asking an external LLM whether research tools are needed.
+
+    writer_tool_decision:
+      mode: skip
+      estimated_external_tokens_saved: true
+      local_llm_eligible: true
+      reason: >
+        Writer should draft from current team handoff context; basic tool-decision
+        LLM calls are skipped by default.
+
+    reviewer_tool_decision:
+      mode: skip
+      estimated_external_tokens_saved: true
+      local_llm_eligible: true
+      reason: >
+        Reviewer should review current team handoff context; basic tool-decision
+        LLM calls are skipped by default.
+
+    synthesis_tool_decision:
+      mode: skip
+      estimated_external_tokens_saved: true
+      reason: >
+        Team synthesis should combine current team outputs directly; basic
+        tool-decision LLM calls are skipped by default.
+
+    researcher_generation:
+      mode: external_llm_when_needed
+      local_llm_eligible: true
+      optimization_opportunity: move_to_local_llm
+      reason: >
+        Research-oriented generation may use an LLM to produce concise findings
+        from task and handoff context, but is a candidate for local LLM offload.
+
+    writer_drafting:
+      mode: external_llm_when_needed
+      local_llm_eligible: true
+      optimization_opportunity: move_to_local_llm
+      reason: >
+        Drafting from known research context is often eligible for local LLM
+        execution or cheaper model tiers.
+
+    reviewer_quality_check:
+      mode: external_llm_when_needed
+      local_llm_eligible: true
+      optimization_opportunity: move_to_local_llm
+      reason: >
+        Review for clarity, completeness, and structure is usually eligible for
+        local LLM execution or cheaper model tiers.
+
+    final_synthesis:
+      mode: external_llm
+      local_llm_eligible: false
+      optimization_opportunity: keep_external_or_make_configurable
+      reason: >
+        Final synthesis is premium-model eligible by default because quality,
+        polish, and executive readability matter most here. This can become
+        configurable in a future execution-tier policy.
+
+  steps:
+    - id: deterministic_team_plan
+      name: Deterministic team plan
+      actor: Manager
+      execution_tier: deterministic
+      action: assign_roles_from_team_config
+      emits:
+        - routing.bypassed
+      token_meaning: tokens_saved
+      optimization: already_avoided_external_llm
+
+    - id: research_route
+      name: Deterministic researcher routing
+      actor: Researcher
+      execution_tier: deterministic
+      action: apply_research_role_contract
+      tools_considered:
+        - web.request
+        - knowledge.search
+        - memory.search
+        - datetime.now
+      emits:
+        - routing.bypassed
+      token_meaning: tokens_saved
+      optimization: already_avoided_external_llm
+
+    - id: research_findings
+      name: Research findings
+      actor: Researcher
+      execution_tier: local_llm_candidate
+      action: produce_research_oriented_output
+      optimization: move_to_local_llm
+      output:
+        key: research_findings
+        description: Concise findings, verifiable points, and context for drafting.
+
+    - id: draft_summary
+      name: Draft executive summary
+      actor: Writer
+      execution_tier: local_llm_candidate
+      action: draft_from_research_handoff
+      optimization: move_to_local_llm
+      output:
+        key: draft
+        description: Executive-summary draft based on research findings.
+
+    - id: review_summary
+      name: Review quality and completeness
+      actor: Reviewer
+      execution_tier: local_llm_candidate
+      action: review_clarity_structure_completeness
+      optimization: move_to_local_llm
+      output:
+        key: review_notes
+        description: Quality notes and recommended improvements.
+
+    - id: final_synthesis
+      name: Final synthesis
+      actor: Manager
+      execution_tier: premium_external_candidate
+      action: synthesize_final_response
+      optimization: keep_external_or_make_configurable
+      output:
+        key: final_response
+        description: Final executive summary ready for user delivery.
+
+  observability:
+    enabled: true
+    required_events:
+      - run.started
+      - routing.bypassed
+      - reasoning.completed
+      - llm.started
+      - llm.completed
+      - run.completed
+    token_intelligence:
+      enabled: true
+      track:
+        - local_deterministic_share
+        - external_llm_share
+        - token_work_total
+        - estimated_tokens_saved
+        - local_llm_candidate_tokens
+        - premium_candidate_tokens
+        - execution_tier
+        - optimization_opportunity
+        - token_work_reason
+      dashboard_required: true
+
+  expected_token_story:
+    summary: >
+      This workflow should show external LLM calls avoided for deterministic
+      orchestration and tool-decision work, remaining local LLM candidate usage
+      for research/draft/review work, and premium/configurable external model
+      usage for final synthesis.
+    proof_points:
+      - manager planning should be deterministic
+      - researcher tool-decision should be deterministic
+      - writer tool-decision should be skipped
+      - reviewer tool-decision should be skipped
+      - synthesis tool-decision should be skipped
+      - writer/reviewer generation should be local LLM candidates
+      - final synthesis should be premium/configurable by default
+
+  notes:
+    - >
+      This is a v0.8.x workflow blueprint. It documents the intended execution
+      contract and cost-control policy before the full v0.9 workflow runtime
+      layer is stabilized.
+    - >
+      Current execution can be approximated with `orch run-team contentteam --debug`.

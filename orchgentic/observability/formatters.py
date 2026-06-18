@@ -83,6 +83,9 @@ def format_run_summary(run: RunRecord) -> str:
         lines.append(f"agent: {run.agent_name or run.agent_id}")
     if run.team_name or run.team_id:
         lines.append(f"team: {run.team_name or run.team_id}")
+    metadata = run.metadata or {}
+    if metadata.get("workflow_id"):
+        lines.append(f"workflow: {metadata.get('workflow_id')} ({metadata.get('workflow_name') or '-' } v{metadata.get('workflow_version') or '-'})")
     lines.append(f"provider_used: {_provider_used_label(run)}")
     if run.provider or run.model:
         lines.append(f"configured_provider: {_configured_provider_label(run)}")

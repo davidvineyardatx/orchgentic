@@ -33,6 +33,8 @@ from orchgentic.triggers.webhook_server import create_webhook_app
 from orchgentic.tools.registry import default_tool_registry
 from orchgentic.teams.registry import TeamRegistry
 from orchgentic.orchestration.team_runner import TeamRunner
+from orchgentic.workflows.registry import WorkflowRegistry
+from orchgentic.workflows.models import WorkflowValidationError
 from orchgentic.runtime.preflight import CapabilityPreflight
 from orchgentic.observability import ObservabilityStore, TraceCollector
 from orchgentic.observability.policy_preview import preview_tool_policy_decision
@@ -65,6 +67,7 @@ app = typer.Typer()
 connect_app = typer.Typer(help="Connect external accounts.")
 gmail_app = typer.Typer(help="Manage Gmail connections.")
 doctor_app = typer.Typer(help="Diagnose Orchgentic workspace health.")
+workflow_app = typer.Typer(help="Manage and run workflow blueprints.")
 create_app = typer.Typer(help="Create Orchgentic configuration files.")
 memory_app = typer.Typer()
 create_app = typer.Typer(help="Create Orchgentic configuration files.")
@@ -83,6 +86,7 @@ app.add_typer(create_app, name="create")
 app.add_typer(connect_app, name="connect")
 app.add_typer(gmail_app, name="gmail")
 app.add_typer(doctor_app, name="doctor")
+app.add_typer(workflow_app, name="workflow")
 
 def _agent_path(name):
     return Path("agents") / (name.lower() if name.lower().endswith(".yaml") else f"{name.lower()}.yaml")
@@ -1366,6 +1370,196 @@ def preflight_team(team_name: str, task: str = typer.Option(..., "--task")):
         typer.echo("")
     if any(issue.severity.value in ["severe", "critical"] for issue in issues):
         raise typer.Exit(1)
+
+
+def _format_workflow_summary(workflow) -> str:
+    lines = [f"{workflow.id}: {workflow.name} (v{workflow.version})"]
+    if workflow.status:
+        lines.append(f"status: {workflow.status}")
+    team_name = workflow.team_name or "-"
+    lines.append(f"team: {team_name}")
+    lines.append(f"steps: {len(workflow.steps)}")
+    if workflow.description:
+        lines.append(f"description: {workflow.description.strip()}")
+    return "\n".join(lines)
+
+
+def _emit_workflow_plan_events(tracer: TraceCollector, workflow) -> None:
+    metadata = workflow.metadata()
+    tracer.event(
+        "workflow.started",
+        component="workflow",
+        name=workflow.id,
+        status="started",
+        message=f"Workflow started: {workflow.name}",
+        data=metadata,
+    )
+    for index, step in enumerate(workflow.steps, start=1):
+        tracer.event(
+            "workflow.step.planned",
+            component="workflow",
+            name=step.id,
+            status="planned",
+            message=step.name or step.id,
+            data={
+                **metadata,
+                "workflow_step": step.id,
+                "workflow_step_name": step.name,
+                "workflow_step_index": index,
+                "actor": step.actor,
+                "execution_tier": step.execution_tier,
+                "optimization_opportunity": step.optimization,
+                "action": step.action,
+            },
+        )
+
+
+@workflow_app.command("list")
+def workflow_list(json_output: bool = typer.Option(False, "--json", help="Output workflows as JSON.")):
+    """List workflow blueprints from the workflows folder."""
+    workflows = WorkflowRegistry().list_workflows()
+    if json_output:
+        typer.echo(json.dumps([workflow.to_dict() for workflow in workflows], indent=2, sort_keys=True, default=str))
+        return
+    if not workflows:
+        typer.echo("No workflows found.")
+        return
+    typer.echo("WORKFLOWS")
+    for workflow in workflows:
+        typer.echo(f"- {workflow.id}: {workflow.name} (v{workflow.version}) team={workflow.team_name or '-'} status={workflow.status}")
+
+
+@workflow_app.command("inspect")
+def workflow_inspect(
+    workflow_id: str,
+    json_output: bool = typer.Option(False, "--json", help="Output workflow config as JSON."),
+):
+    """Inspect one workflow blueprint."""
+    try:
+        workflow = WorkflowRegistry().get_workflow(workflow_id)
+    except WorkflowValidationError as exc:
+        typer.echo(str(exc))
+        raise typer.Exit(1)
+    if not workflow:
+        typer.echo(f"Workflow not found: {workflow_id}")
+        raise typer.Exit(1)
+    if json_output:
+        typer.echo(json.dumps(workflow.to_dict(), indent=2, sort_keys=True, default=str))
+        return
+    typer.echo(_format_workflow_summary(workflow))
+    typer.echo("")
+    typer.echo("steps:")
+    for step in workflow.steps:
+        typer.echo(f"- {step.id}: actor={step.actor or '-'} tier={step.execution_tier or '-'} action={step.action or '-'}")
+
+
+@workflow_app.command("validate")
+def workflow_validate(workflow_id: str | None = typer.Argument(None, help="Workflow id to validate. Omit to validate all.")):
+    """Validate workflow blueprint shape and team references."""
+    registry = WorkflowRegistry()
+    workflows = []
+    if workflow_id:
+        workflow = registry.get_workflow(workflow_id)
+        if not workflow:
+            typer.echo(f"Workflow not found: {workflow_id}")
+            raise typer.Exit(1)
+        workflows = [workflow]
+    else:
+        workflows = registry.list_workflows()
+
+    if not workflows:
+        typer.echo("No workflows found.")
+        raise typer.Exit(1)
+
+    team_registry = TeamRegistry()
+    failures = []
+    for workflow in workflows:
+        team_name = workflow.team_name
+        team = team_registry.get_team(team_name) if team_name else None
+        if not team:
+            failures.append(f"{workflow.id}: referenced team not found: {team_name or '-'}")
+        else:
+            typer.echo(f"{workflow.id}: valid (team={team.name}, steps={len(workflow.steps)})")
+
+    if failures:
+        for failure in failures:
+            typer.echo(failure)
+        raise typer.Exit(1)
+
+
+@workflow_app.command("run")
+def workflow_run(
+    workflow_id: str,
+    task: str = typer.Option(None, "--task", "-t", help="Task to execute. Prompts when omitted."),
+    debug: bool = typer.Option(False, "--debug", help="Show team outputs and workflow execution details."),
+    no_preflight: bool = typer.Option(False, "--no-preflight", help="Skip capability preflight checks."),
+):
+    """Run a workflow blueprint through its mapped team and record workflow proof metadata."""
+    async def _run():
+        registry = WorkflowRegistry()
+        try:
+            workflow = registry.get_workflow(workflow_id)
+        except WorkflowValidationError as exc:
+            typer.echo(str(exc))
+            raise typer.Exit(1)
+        if not workflow:
+            typer.echo(f"Workflow not found: {workflow_id}")
+            raise typer.Exit(1)
+
+        team_name = workflow.team_name
+        team = TeamRegistry().get_team(team_name) if team_name else None
+        if not team:
+            typer.echo(f"Workflow team not found: {team_name or '-'}")
+            raise typer.Exit(1)
+
+        default_task = task or workflow.default_task or team.task
+        run_task = task or typer.prompt("Workflow task", default=default_task)
+        tracer = TraceCollector()
+        metadata = {
+            "source": "cli",
+            "debug": debug,
+            **workflow.metadata(),
+            "workflow_path": str(workflow.path) if workflow.path else None,
+            "mapped_team": team.name,
+        }
+        tracer.start_run(
+            run_type="workflow",
+            task=run_task,
+            team_id=getattr(team, "id", None),
+            team_name=team.name,
+            metadata=metadata,
+        )
+        try:
+            _emit_workflow_plan_events(tracer, workflow)
+            result = await TeamRunner().run_team(team, task=run_task, debug=debug, preflight=not no_preflight, tracer=tracer)
+            tracer.event(
+                "workflow.completed",
+                component="workflow",
+                name=workflow.id,
+                status="completed",
+                message=f"Workflow completed: {workflow.name}",
+                data=metadata,
+            )
+            tracer.complete_run(status="completed", message="Workflow run completed.", data=metadata)
+        except RuntimeError as exc:
+            tracer.fail_run(exc)
+            typer.echo(str(exc))
+            raise typer.Exit(1)
+        except Exception as exc:
+            tracer.fail_run(exc)
+            raise
+
+        typer.echo(f"WORKFLOW: {workflow.name} ({workflow.id} v{workflow.version})")
+        typer.echo(f"TEAM: {team.name}")
+        typer.echo("TEAM FINAL")
+        typer.echo(result["final"])
+        if debug:
+            typer.echo("\nWORKFLOW STEPS")
+            for step in workflow.steps:
+                typer.echo(f"- {step.id}: actor={step.actor or '-'} tier={step.execution_tier or '-'} action={step.action or '-'}")
+            typer.echo("\nTEAM OUTPUTS")
+            typer.echo(result["outputs"])
+    asyncio.run(_run())
 
 @app.command("run-team")
 def run_team(
