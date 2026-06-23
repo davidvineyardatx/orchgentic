@@ -33,6 +33,51 @@ class RoutingConfig(BaseModel):
     event: EventRoutingConfig = Field(default_factory=EventRoutingConfig)
     policy: PolicyRoutingConfig = Field(default_factory=PolicyRoutingConfig)
 
+class DeterministicExecutionConfig(BaseModel):
+    enabled: bool = True
+
+class LocalReasoningExecutionConfig(BaseModel):
+    enabled: bool = True
+
+class LocalLLMExecutionConfig(BaseModel):
+    enabled: bool = False
+    eligible_for: list[str] = Field(
+        default_factory=lambda: [
+            "classification",
+            "routing",
+            "summarization",
+            "review",
+        ]
+    )
+
+class ExternalLLMExecutionConfig(BaseModel):
+    enabled: bool = True
+    require_for: list[str] = Field(
+        default_factory=lambda: [
+            "complex_generation",
+            "high_uncertainty_reasoning",
+        ]
+    )
+
+class PremiumModelExecutionConfig(BaseModel):
+    enabled: bool = True
+    require_for: list[str] = Field(
+        default_factory=lambda: [
+            "final_synthesis",
+            "executive_output",
+            "high_quality_final",
+        ]
+    )
+
+class ExecutionPolicyConfig(BaseModel):
+    enabled: bool = True
+    default_mode: str = "external_llm_when_needed"
+    deterministic: DeterministicExecutionConfig = Field(default_factory=DeterministicExecutionConfig)
+    local_reasoning: LocalReasoningExecutionConfig = Field(default_factory=LocalReasoningExecutionConfig)
+    local_llm: LocalLLMExecutionConfig = Field(default_factory=LocalLLMExecutionConfig)
+    external_llm: ExternalLLMExecutionConfig = Field(default_factory=ExternalLLMExecutionConfig)
+    premium_model: PremiumModelExecutionConfig = Field(default_factory=PremiumModelExecutionConfig)
+
 class MemoryConfig(BaseModel):
     enabled: bool = True
     recent_messages: int = 10
@@ -68,6 +113,7 @@ class AgentConfig(BaseModel):
     delegation: DelegationConfig = Field(default_factory=DelegationConfig)
     reasoning: ReasoningConfig = Field(default_factory=ReasoningConfig)
     routing: RoutingConfig = Field(default_factory=RoutingConfig)
+    execution_policy: ExecutionPolicyConfig = Field(default_factory=ExecutionPolicyConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     knowledge: KnowledgeConfig = Field(default_factory=KnowledgeConfig)
     gmail: dict = Field(default_factory=dict)
@@ -90,3 +136,4 @@ class TeamConfig(BaseModel):
     shared_context: bool = True
     max_rounds: int = 3
     task: str = "Coordinate the team to complete the requested task."
+    execution_policy: ExecutionPolicyConfig = Field(default_factory=ExecutionPolicyConfig)

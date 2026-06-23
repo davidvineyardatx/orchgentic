@@ -218,3 +218,39 @@ orch route-metrics
 ```
 
 Useful for understanding LLM avoidance, local routes, and token savings.
+
+
+## Execution Policy Awareness
+
+Routing judgments include an advisory `execution_policy` section.
+
+Example:
+
+```text
+execution_policy:
+  purpose: routing
+  recommended_execution_tier: local_llm_candidate
+  policy_action: recommend_local_llm
+  advisory: true
+  enforced: false
+```
+
+This is intentionally advisory in alpha.4.
+
+It helps developers see how policy would classify a decision without changing runtime behavior yet.
+
+
+## Judgment Output Polish
+
+The internal orchestration judgment keeps the full workflow router object for traces and tests.
+
+For CLI display, single-agent routes can show workflow as not applicable:
+
+```text
+workflow:
+  applicable: false
+  reason: Not applicable for single-agent routing.
+  workflow_type: null
+```
+
+This avoids implying that a workflow was meaningfully considered for simple single-agent jobs.

@@ -31,29 +31,9 @@ Direct tool runs are observable and can record estimated token savings when they
 
 ## Team Commands
 
-Create a starter team YAML file:
-
 ```bash
-orch create-team MarketingTeam
-orch create-team MarketingTeam --members Researcher,Writer,Reviewer
-orch create-team MarketingTeam --member Researcher --member Writer --member Reviewer
-orch create-team MarketingTeam --orchestrator Manager
-orch create-team MarketingTeam --overwrite
-```
-
-This creates:
-
-```text
-teams/marketingteam.yaml
-```
-
-Inspect and run a team:
-
-```bash
-orch list-teams
-orch inspect-team MarketingTeam
-orch preflight-team MarketingTeam --task "Test this team setup"
-orch run-team MarketingTeam --debug
+orch run-team ContentTeam
+orch run-team ContentTeam --debug
 ```
 
 ## Routing and Reasoning
@@ -66,18 +46,6 @@ orch judge-route "send an email to studio@example.com saying hello" --agent Bob
 ```
 
 `judge-route` is analysis-only. Use `orch run` or `orch tool run` for execution.
-
-## Configuration Docs
-
-Important setup references:
-
-```text
-docs/CORE_YAML_CONTRACTS.md
-docs/PROVIDERS.md
-docs/AGENT_CONFIGURATION.md
-docs/TEAM_CONFIGURATION.md
-docs/WORKFLOWS.md
-```
 
 ## Provider Configuration
 

@@ -3,6 +3,7 @@ from typing import Any
 
 from orchgentic.runtime.local_reasoner import LocalReasoner
 from orchgentic.runtime.escalation import EscalationDecision, EscalationEngine, default_escalation_policy
+from orchgentic.runtime.execution_policy import classify_routing_execution_policy
 from orchgentic.core.routing import (
     EventContext,
     EventContextRouter,
@@ -61,6 +62,14 @@ def evaluate_orchestration_judgment(task: str, cfg=None, registry=None, event_co
         policy_route=policy_route,
     )
 
+    execution_policy = classify_routing_execution_policy(
+        task,
+        cfg,
+        local_decision=local_decision,
+        escalation=escalation,
+        final_decision=final,
+    )
+
     return {
         "local_reasoner": {
             "intent": local_decision.intent,
@@ -74,6 +83,7 @@ def evaluate_orchestration_judgment(task: str, cfg=None, registry=None, event_co
         "workflow": workflow_route.to_dict(),
         "event_context": event_route.to_dict(),
         "policy": policy_route.to_dict(),
+        "execution_policy": execution_policy,
         "escalation": asdict(escalation),
         "final_decision": final.to_dict(),
     }
@@ -170,3 +180,24 @@ def _final_decision(*, local_decision, escalation, workflow_route, event_route, 
         event_type=event_route.event_type,
         external_llm_allowed=False,
     )
+
+
+def format_orchestration_judgment_for_cli(judgment: dict) -> dict:
+    """Return a human-oriented view of orchestration judgment output.
+
+    The internal judgment keeps the full workflow router object for traces and
+    tests. CLI output can be clearer for single-agent runs where workflow
+    orchestration is not applicable.
+    """
+
+    formatted = dict(judgment)
+    workflow = judgment.get("workflow")
+
+    if isinstance(workflow, dict) and workflow.get("should_use_workflow") is False:
+        formatted["workflow"] = {
+            "applicable": False,
+            "reason": "Not applicable for single-agent routing.",
+            "workflow_type": None,
+        }
+
+    return formatted

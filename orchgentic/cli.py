@@ -1,10 +1,11 @@
-from orchgentic.runtime.router_judgment import evaluate_orchestration_judgment
+from orchgentic.runtime.router_judgment import evaluate_orchestration_judgment, format_orchestration_judgment_for_cli
 from orchgentic.runtime.metrics import record_route_metric
 from orchgentic.runtime.token_estimator import estimate_route_savings
 import time
 from orchgentic.runtime.deterministic_formatter import DeterministicFormatter
 from orchgentic.runtime.deterministic_router import DeterministicRouter
 from orchgentic.runtime.cost_tracker import build_route_telemetry, append_route_log
+from orchgentic.runtime.execution_policy import classify_routing_execution_policy
 import asyncio
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -196,9 +197,15 @@ async def _try_deterministic_route(task, cfg, registry, debug=False, tracer=None
 
     formatter = DeterministicFormatter()
     selected_tool = decision.tool or (decision.steps[0].tool if decision.steps else None)
+    route_type = getattr(decision, "route_type", "single_tool")
+    execution_policy_decision = classify_routing_execution_policy(
+        task,
+        cfg,
+        route_type=route_type,
+    )
 
     telemetry = build_route_telemetry(
-        route_type=getattr(decision, "route_type", "single_tool"),
+        route_type=route_type,
         external_llm_used=False,
         selected_tool=selected_tool,
         confidence=decision.confidence,
@@ -213,6 +220,7 @@ async def _try_deterministic_route(task, cfg, registry, debug=False, tracer=None
         escalation_reason="not_required",
         reasoning_level="local_tool",
     )
+    telemetry["execution_policy"] = execution_policy_decision
 
     # Deterministic routes still execute inside an agent run when invoked through
     # `orch run <agent>`. Validate the selected tool route before emitting
@@ -249,9 +257,18 @@ async def _try_deterministic_route(task, cfg, registry, debug=False, tracer=None
             data={"agent_id": getattr(cfg, "id", None), "deterministic_route": True},
         )
         tracer.event(
+            "execution_policy.classified",
+            component="policy",
+            name=execution_policy_decision.get("policy_action"),
+            status="completed",
+            message=execution_policy_decision.get("reason"),
+            data=execution_policy_decision,
+            token_source="not_applicable",
+        )
+        tracer.event(
             "routing.completed",
             component="routing",
-            name=getattr(decision, "route_type", "single_tool"),
+            name=route_type,
             status="completed",
             message=decision.reason,
             duration_ms=telemetry.get("execution_time_ms"),
@@ -463,7 +480,8 @@ def judge_route(
     memory = MemoryManager(cfg.memory.db_path)
     knowledge = KnowledgeManager(provider, cfg.knowledge.store, cfg.knowledge.db_path, cfg.knowledge.collection)
     registry = default_tool_registry(memory, knowledge, source_agent_config=cfg)
-    typer.echo(evaluate_orchestration_judgment(task, cfg=cfg, registry=registry, event_context={"event_type": event_type, "source": "cli"}))
+    judgment = evaluate_orchestration_judgment(task, cfg=cfg, registry=registry, event_context={"event_type": event_type, "source": "cli"})
+    typer.echo(format_orchestration_judgment_for_cli(judgment))
 
 
 @app.command("route-metrics")

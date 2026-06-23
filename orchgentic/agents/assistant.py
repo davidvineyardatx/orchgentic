@@ -11,6 +11,7 @@ from orchgentic.tools.registry import default_tool_registry
 from orchgentic.tools.runtime import ToolRuntime
 from orchgentic.core.reasoning.runtime_hooks import preflight_reasoning
 from orchgentic.runtime.token_estimator import estimate_tokens
+from orchgentic.runtime.execution_policy import classify_routing_execution_policy
 
 
 class AssistantAgent:
@@ -123,6 +124,22 @@ class AssistantAgent:
                 'escalation_reason': preflight.escalation.reason,
                 'suggested_tools': preflight.local_result.suggested_tools,
             })
+            execution_policy_decision = classify_routing_execution_policy(
+                task,
+                self.config,
+                escalation=preflight.escalation,
+            )
+            self.logger.write(run.run_id, 'EXECUTION_POLICY', execution_policy_decision)
+            if tracer:
+                tracer.event(
+                    'execution_policy.classified',
+                    component='policy',
+                    name=execution_policy_decision.get('policy_action'),
+                    status='completed',
+                    message=execution_policy_decision.get('reason'),
+                    data=execution_policy_decision,
+                    token_source='not_applicable',
+                )
             if preflight.local_result.local_answer and not preflight.escalation.should_call_llm:
                 answer = preflight.local_result.local_answer
                 self.logger.write(run.run_id,'ANSWER',answer)
