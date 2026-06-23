@@ -285,3 +285,18 @@ routes that remain observe-only
 ```
 
 The metadata is intentionally non-invasive. It does not change team orchestration, provider selection, or tool policy decisions.
+
+
+## Enforcement Summary Clarity
+
+`execution_policy` can include both broad advisory status and narrow safe-enforcement metadata.
+
+The `enforcement_summary` block makes the distinction explicit for CLI and dashboard readers:
+
+```text
+mode: safe_deterministic_only
+status: safely_enforced
+full_policy_enforced: false
+```
+
+This means only deterministic/local enforcement was applied. Full policy enforcement remains disabled until a later release.

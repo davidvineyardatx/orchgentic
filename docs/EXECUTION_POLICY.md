@@ -370,3 +370,37 @@ safe_enforcement:
 ```
 
 Team/workflow routes and generation routes remain observe-only.
+
+
+## Enforcement Summary
+
+In `v0.8.0-beta.4-alpha.8`, execution-policy output includes an `enforcement_summary` block.
+
+This avoids confusion between:
+
+```text
+execution_policy.enforced: false
+safe_enforcement.enforced: true
+```
+
+The first value means full policy enforcement is not enabled yet. The second value means a narrow deterministic/local-only guardrail was safely applied.
+
+For deterministic/local routes, the summary is:
+
+```text
+enforcement_summary:
+  mode: safe_deterministic_only
+  status: safely_enforced
+  safe_enforcement_applied: true
+  full_policy_enforced: false
+```
+
+For all other routes, the summary is:
+
+```text
+enforcement_summary:
+  mode: observe_only
+  status: advisory
+  safe_enforcement_applied: false
+  full_policy_enforced: false
+```

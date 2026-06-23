@@ -307,7 +307,7 @@ def apply_safe_execution_policy_enforcement(
             "reason": "Deterministic/local execution was already selected, so external LLM usage remains disabled for this route.",
             "external_llm_allowed": False,
         }
-        return decision
+        return summarize_execution_policy_enforcement(decision)
 
     decision["safe_enforcement"] = {
         "enforced": False,
@@ -316,4 +316,38 @@ def apply_safe_execution_policy_enforcement(
         "reason": "Execution policy remains advisory for this route.",
         "external_llm_allowed": None,
     }
-    return decision
+    return summarize_execution_policy_enforcement(decision)
+
+
+def summarize_execution_policy_enforcement(decision: dict[str, Any]) -> dict[str, Any]:
+    """Add a human-readable enforcement summary to an execution-policy decision.
+
+    ``enforced`` remains false at the broad execution-policy layer until full
+    policy enforcement exists. ``safe_enforcement`` can still be true for the
+    narrow deterministic/local-only guardrail. This summary makes that distinction
+    explicit for CLI, traces, and dashboard consumers.
+    """
+
+    policy = dict(decision or {})
+    safe = dict(policy.get("safe_enforcement") or {})
+    safe_enforced = bool(safe.get("enforced"))
+
+    if safe_enforced:
+        summary = {
+            "mode": "safe_deterministic_only",
+            "status": "safely_enforced",
+            "description": "Safe enforcement applied only to a deterministic/local route. Full execution policy remains advisory.",
+            "safe_enforcement_applied": True,
+            "full_policy_enforced": False,
+        }
+    else:
+        summary = {
+            "mode": "observe_only",
+            "status": "advisory",
+            "description": "Execution policy is visible but not enforced for this route.",
+            "safe_enforcement_applied": False,
+            "full_policy_enforced": False,
+        }
+
+    policy["enforcement_summary"] = summary
+    return policy
