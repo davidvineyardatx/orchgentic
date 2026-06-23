@@ -1,5 +1,36 @@
 # Orchgentic Roadmap
 
+## Current Track: v0.8.0-beta.5 — Execution Tier Configuration and Local LLM Readiness
+
+Goal:
+
+```text
+Use the stabilized policy layer from beta.4 to prepare clear execution-tier configuration for deterministic, local LLM, external LLM, and premium/model-configurable work.
+```
+
+## Completed: v0.8.0-beta.4 — Runtime Cost Hardening and Decision Policy Stabilization
+
+Status: feature-complete after `v0.8.0-beta.4-alpha.9`.
+
+Completed beta.4 milestones:
+
+```text
+v0.8.0-beta.4-alpha.3 — Execution Policy Foundation
+v0.8.0-beta.4-alpha.4 — Policy-Aware Routing Decisions
+v0.8.0-beta.4-alpha.5 — Deterministic Policy Classification and Judgment Output Polish
+v0.8.0-beta.4-alpha.6 — Safe Advisory Policy Enforcement
+v0.8.0-beta.4-alpha.7 — Safe Enforcement Trace Coverage
+v0.8.0-beta.4-alpha.8 — Policy Enforcement Clarity
+v0.8.0-beta.4-alpha.9 — Policy Report and Route Summary
+```
+
+Beta.4 added policy-aware route judgment, safe deterministic enforcement metadata, trace/report coverage, and compact CLI policy inspection through `orch judge-route --summary` and `orch policy-report`.
+
+No additional beta.4 feature work is planned.
+
+
+## Historical v0.8.0 Observability Track
+
 ## Current Track: v0.8.0 Observability
 
 Goal:

@@ -404,3 +404,29 @@ enforcement_summary:
   safe_enforcement_applied: false
   full_policy_enforced: false
 ```
+
+
+## Policy Report CLI
+
+`v0.8.0-beta.4-alpha.9` adds a compact policy report command:
+
+```bash
+orch policy-report "what is the local time?" --agent Bob
+```
+
+The report surfaces:
+
+```text
+final action
+workflow applicability
+tool policy action
+recommended execution tier
+safe enforcement mode
+full policy enforcement status
+```
+
+Use JSON for automation:
+
+```bash
+orch policy-report "what is the local time?" --agent Bob --json
+```

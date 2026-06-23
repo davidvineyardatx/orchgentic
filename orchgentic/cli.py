@@ -1,4 +1,4 @@
-from orchgentic.runtime.router_judgment import evaluate_orchestration_judgment, format_orchestration_judgment_for_cli
+from orchgentic.runtime.router_judgment import evaluate_orchestration_judgment, format_orchestration_judgment_for_cli, summarize_orchestration_judgment, format_orchestration_summary_text
 from orchgentic.runtime.metrics import record_route_metric
 from orchgentic.runtime.token_estimator import estimate_route_savings
 import time
@@ -477,6 +477,8 @@ def judge_route(
     task: str = typer.Argument(...),
     agent_name: str = typer.Option("Bob", "--agent"),
     event_type: str = typer.Option("manual", "--event-type", help="manual, heartbeat, webhook, scheduled, or unknown."),
+    summary: bool = typer.Option(False, "--summary", help="Show a compact human-readable policy/routing summary."),
+    json_output: bool = typer.Option(False, "--json", help="Emit JSON output instead of Python-style repr."),
 ):
     """Evaluate local reasoner, workflow, event, policy, and escalation judgment for a task."""
     cfg = load_agent(_agent_path(agent_name))
@@ -485,7 +487,34 @@ def judge_route(
     knowledge = KnowledgeManager(provider, cfg.knowledge.store, cfg.knowledge.db_path, cfg.knowledge.collection)
     registry = default_tool_registry(memory, knowledge, source_agent_config=cfg)
     judgment = evaluate_orchestration_judgment(task, cfg=cfg, registry=registry, event_context={"event_type": event_type, "source": "cli"})
-    typer.echo(format_orchestration_judgment_for_cli(judgment))
+    output = summarize_orchestration_judgment(judgment) if summary else format_orchestration_judgment_for_cli(judgment)
+    if json_output:
+        typer.echo(json.dumps(output, indent=2))
+    elif summary:
+        typer.echo(format_orchestration_summary_text(output))
+    else:
+        typer.echo(output)
+
+
+@app.command("policy-report")
+def policy_report(
+    task: str = typer.Argument(...),
+    agent_name: str = typer.Option("Bob", "--agent"),
+    event_type: str = typer.Option("manual", "--event-type", help="manual, heartbeat, webhook, scheduled, or unknown."),
+    json_output: bool = typer.Option(False, "--json", help="Emit JSON output."),
+):
+    """Show a compact policy report for a task without printing the full route judgment."""
+    cfg = load_agent(_agent_path(agent_name))
+    provider = create_provider(cfg.provider)
+    memory = MemoryManager(cfg.memory.db_path)
+    knowledge = KnowledgeManager(provider, cfg.knowledge.store, cfg.knowledge.db_path, cfg.knowledge.collection)
+    registry = default_tool_registry(memory, knowledge, source_agent_config=cfg)
+    judgment = evaluate_orchestration_judgment(task, cfg=cfg, registry=registry, event_context={"event_type": event_type, "source": "cli"})
+    summary_data = summarize_orchestration_judgment(judgment)
+    if json_output:
+        typer.echo(json.dumps(summary_data, indent=2))
+    else:
+        typer.echo(format_orchestration_summary_text(summary_data))
 
 
 @app.command("route-metrics")

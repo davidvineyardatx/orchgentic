@@ -300,3 +300,20 @@ full_policy_enforced: false
 ```
 
 This means only deterministic/local enforcement was applied. Full policy enforcement remains disabled until a later release.
+
+
+## Route Summary Output
+
+`orch judge-route` supports a compact summary mode:
+
+```bash
+orch judge-route "what is the local time?" --agent Bob --summary
+```
+
+This keeps the default raw judgment output available while providing a cleaner human-readable route and policy summary.
+
+Use JSON for automation:
+
+```bash
+orch judge-route "what is the local time?" --agent Bob --summary --json
+```

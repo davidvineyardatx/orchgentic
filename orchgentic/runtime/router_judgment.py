@@ -205,3 +205,112 @@ def format_orchestration_judgment_for_cli(judgment: dict) -> dict:
         }
 
     return formatted
+
+
+def summarize_orchestration_judgment(judgment: dict) -> dict:
+    """Return a compact policy/routing summary for CLI and report output."""
+
+    local_reasoner = judgment.get("local_reasoner", {}) or {}
+    workflow = judgment.get("workflow", {}) or {}
+    policy = judgment.get("policy", {}) or {}
+    execution_policy = judgment.get("execution_policy", {}) or {}
+    safe_enforcement = execution_policy.get("safe_enforcement", {}) or {}
+    enforcement_summary = execution_policy.get("enforcement_summary", {}) or {}
+    escalation = judgment.get("escalation", {}) or {}
+    final_decision = judgment.get("final_decision", {}) or {}
+
+    workflow_applicable = bool(workflow.get("should_use_workflow")) if isinstance(workflow, dict) else False
+    if isinstance(workflow, dict) and "applicable" in workflow:
+        workflow_applicable = bool(workflow.get("applicable"))
+
+    return {
+        "route": {
+            "final_action": final_decision.get("action"),
+            "intent": local_reasoner.get("intent"),
+            "confidence": final_decision.get("confidence", local_reasoner.get("confidence")),
+            "external_llm_allowed": final_decision.get("external_llm_allowed"),
+            "external_llm_escalated": bool(escalation.get("escalate")),
+        },
+        "workflow": {
+            "applicable": workflow_applicable,
+            "workflow_type": workflow.get("workflow_type") if isinstance(workflow, dict) else None,
+            "reason": workflow.get("reason") if isinstance(workflow, dict) else None,
+        },
+        "tool_policy": {
+            "action": policy.get("action"),
+            "allowed": policy.get("allowed"),
+            "reason": policy.get("reason"),
+            "affected_tools": list(policy.get("affected_tools") or []),
+            "require_confirmation": bool(policy.get("require_confirmation")),
+        },
+        "execution_policy": {
+            "purpose": execution_policy.get("purpose"),
+            "recommended_execution_tier": execution_policy.get("recommended_execution_tier"),
+            "policy_action": execution_policy.get("policy_action"),
+            "advisory": execution_policy.get("advisory"),
+            "full_policy_enforced": enforcement_summary.get("full_policy_enforced", execution_policy.get("enforced")),
+            "safe_enforcement_applied": enforcement_summary.get("safe_enforcement_applied", safe_enforcement.get("enforced")),
+            "safe_enforcement_scope": safe_enforcement.get("scope"),
+            "enforcement_mode": enforcement_summary.get("mode"),
+            "enforcement_status": enforcement_summary.get("status"),
+            "reason": execution_policy.get("reason"),
+        },
+    }
+
+
+def format_orchestration_summary_text(summary: dict) -> str:
+    """Format a compact human-readable route/policy summary."""
+
+    route = summary.get("route", {}) or {}
+    workflow = summary.get("workflow", {}) or {}
+    tool_policy = summary.get("tool_policy", {}) or {}
+    execution_policy = summary.get("execution_policy", {}) or {}
+
+    lines = [
+        "ROUTE SUMMARY",
+        f"- Final action: {route.get('final_action')}",
+        f"- Intent: {route.get('intent')}",
+        f"- Confidence: {route.get('confidence')}",
+        f"- External LLM escalated: {route.get('external_llm_escalated')}",
+        "",
+        "WORKFLOW",
+        f"- Applicable: {workflow.get('applicable')}",
+        f"- Type: {workflow.get('workflow_type')}",
+    ]
+    if workflow.get("reason"):
+        lines.append(f"- Reason: {workflow.get('reason')}")
+
+    lines.extend(
+        [
+            "",
+            "TOOL POLICY",
+            f"- Action: {tool_policy.get('action')}",
+            f"- Allowed: {tool_policy.get('allowed')}",
+            f"- Requires confirmation: {tool_policy.get('require_confirmation')}",
+        ]
+    )
+    affected_tools = tool_policy.get("affected_tools") or []
+    if affected_tools:
+        lines.append(f"- Affected tools: {', '.join(affected_tools)}")
+    if tool_policy.get("reason"):
+        lines.append(f"- Reason: {tool_policy.get('reason')}")
+
+    lines.extend(
+        [
+            "",
+            "EXECUTION POLICY",
+            f"- Purpose: {execution_policy.get('purpose')}",
+            f"- Recommended tier: {execution_policy.get('recommended_execution_tier')}",
+            f"- Policy action: {execution_policy.get('policy_action')}",
+            f"- Enforcement mode: {execution_policy.get('enforcement_mode')}",
+            f"- Enforcement status: {execution_policy.get('enforcement_status')}",
+            f"- Safe enforcement applied: {execution_policy.get('safe_enforcement_applied')}",
+            f"- Full policy enforced: {execution_policy.get('full_policy_enforced')}",
+        ]
+    )
+    if execution_policy.get("safe_enforcement_scope"):
+        lines.append(f"- Safe enforcement scope: {execution_policy.get('safe_enforcement_scope')}")
+    if execution_policy.get("reason"):
+        lines.append(f"- Reason: {execution_policy.get('reason')}")
+
+    return "\n".join(lines)
