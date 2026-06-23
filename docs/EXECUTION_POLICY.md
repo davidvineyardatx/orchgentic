@@ -430,3 +430,55 @@ Use JSON for automation:
 ```bash
 orch policy-report "what is the local time?" --agent Bob --json
 ```
+
+
+## Execution Tier Configuration
+
+`v0.8.0-beta.5-alpha.1` introduces execution-tier configuration normalization.
+
+This is a configuration and normalization layer only. It does not route work to a local LLM yet.
+
+Supported shape:
+
+```yaml
+execution_tiers:
+  deterministic:
+    enabled: true
+
+  local_reasoning:
+    enabled: true
+
+  local_llm:
+    enabled: false
+    provider: lmstudio
+    model: null
+    eligible_for:
+      - routing
+      - classification
+      - summarization
+      - review
+
+  external_llm:
+    enabled: true
+    require_for:
+      - complex_generation
+      - high_uncertainty_reasoning
+
+  premium_model:
+    enabled: true
+    require_for:
+      - final_synthesis
+      - executive_output
+      - high_quality_final
+```
+
+`execution_tiers` is currently an alias for the stabilized execution-policy shape.
+
+Current behavior:
+
+```text
+configuration is normalized
+policy classification can read the tier settings
+runtime routing behavior is unchanged
+local LLM execution is not enabled yet
+```

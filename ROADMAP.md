@@ -8,6 +8,20 @@ Goal:
 Use the stabilized policy layer from beta.4 to prepare clear execution-tier configuration for deterministic, local LLM, external LLM, and premium/model-configurable work.
 ```
 
+Planned beta.5 milestones:
+
+```text
+v0.8.0-beta.5-alpha.1 — Execution Tier Config Normalization
+```
+
+Scope boundary:
+
+```text
+No local LLM execution yet.
+No routing behavior changes.
+No new dashboard/report features.
+```
+
 ## Completed: v0.8.0-beta.4 — Runtime Cost Hardening and Decision Policy Stabilization
 
 Status: feature-complete after `v0.8.0-beta.4-alpha.9`.

@@ -30,6 +30,8 @@ class NormalizedExecutionPolicy:
     deterministic_enabled: bool = True
     local_reasoning_enabled: bool = True
     local_llm_enabled: bool = False
+    local_llm_provider: str | None = "lmstudio"
+    local_llm_model: str | None = None
     local_llm_eligible_for: tuple[str, ...] = field(default_factory=lambda: tuple(DEFAULT_LOCAL_LLM_ELIGIBLE_FOR))
     external_llm_enabled: bool = True
     external_llm_require_for: tuple[str, ...] = field(default_factory=lambda: tuple(DEFAULT_EXTERNAL_REQUIRE_FOR))
@@ -48,6 +50,8 @@ class NormalizedExecutionPolicy:
             },
             "local_llm": {
                 "enabled": self.local_llm_enabled,
+                "provider": self.local_llm_provider,
+                "model": self.local_llm_model,
                 "eligible_for": list(self.local_llm_eligible_for),
             },
             "external_llm": {
@@ -88,6 +92,18 @@ def _string_list(value: Any, fallback: list[str]) -> tuple[str, ...]:
         return tuple(fallback)
 
 
+def normalize_execution_tiers(config_or_policy: Any = None) -> NormalizedExecutionPolicy:
+    """Normalize execution-tier configuration without changing routing behavior.
+
+    `execution_tiers` is a beta.5 alias for the existing execution-policy
+    structure. It prepares a clearer configuration surface for deterministic,
+    local reasoning, local LLM, external LLM, and premium/model-configurable
+    work while preserving current behavior.
+    """
+
+    return normalize_execution_policy(config_or_policy)
+
+
 def normalize_execution_policy(config_or_policy: Any = None) -> NormalizedExecutionPolicy:
     """Normalize agent/team execution policy into a stable runtime shape.
 
@@ -96,7 +112,9 @@ def normalize_execution_policy(config_or_policy: Any = None) -> NormalizedExecut
     routing is introduced.
     """
 
-    if config_or_policy is not None and hasattr(config_or_policy, "execution_policy"):
+    if config_or_policy is not None and hasattr(config_or_policy, "execution_tiers") and getattr(config_or_policy, "execution_tiers") is not None:
+        raw = getattr(config_or_policy, "execution_tiers")
+    elif config_or_policy is not None and hasattr(config_or_policy, "execution_policy"):
         raw = getattr(config_or_policy, "execution_policy")
     else:
         raw = config_or_policy
@@ -115,6 +133,8 @@ def normalize_execution_policy(config_or_policy: Any = None) -> NormalizedExecut
         deterministic_enabled=bool(deterministic.get("enabled", True)),
         local_reasoning_enabled=bool(local_reasoning.get("enabled", True)),
         local_llm_enabled=bool(local_llm.get("enabled", False)),
+        local_llm_provider=local_llm.get("provider", "lmstudio"),
+        local_llm_model=local_llm.get("model"),
         local_llm_eligible_for=_string_list(local_llm.get("eligible_for"), DEFAULT_LOCAL_LLM_ELIGIBLE_FOR),
         external_llm_enabled=bool(external_llm.get("enabled", True)),
         external_llm_require_for=_string_list(external_llm.get("require_for"), DEFAULT_EXTERNAL_REQUIRE_FOR),

@@ -41,6 +41,8 @@ class LocalReasoningExecutionConfig(BaseModel):
 
 class LocalLLMExecutionConfig(BaseModel):
     enabled: bool = False
+    provider: str | None = "lmstudio"
+    model: str | None = None
     eligible_for: list[str] = Field(
         default_factory=lambda: [
             "classification",
@@ -114,6 +116,7 @@ class AgentConfig(BaseModel):
     reasoning: ReasoningConfig = Field(default_factory=ReasoningConfig)
     routing: RoutingConfig = Field(default_factory=RoutingConfig)
     execution_policy: ExecutionPolicyConfig = Field(default_factory=ExecutionPolicyConfig)
+    execution_tiers: ExecutionPolicyConfig | None = None
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     knowledge: KnowledgeConfig = Field(default_factory=KnowledgeConfig)
     gmail: dict = Field(default_factory=dict)
@@ -137,3 +140,4 @@ class TeamConfig(BaseModel):
     max_rounds: int = 3
     task: str = "Coordinate the team to complete the requested task."
     execution_policy: ExecutionPolicyConfig = Field(default_factory=ExecutionPolicyConfig)
+    execution_tiers: ExecutionPolicyConfig | None = None
