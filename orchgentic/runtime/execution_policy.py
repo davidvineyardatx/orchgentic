@@ -183,8 +183,11 @@ def infer_execution_purpose(
 ) -> str:
     """Infer a coarse execution purpose for advisory policy classification."""
 
-    action = getattr(final_decision, "action", None)
-    action_value = getattr(action, "value", action)
+    if isinstance(final_decision, dict):
+        action_value = final_decision.get("action")
+    else:
+        action = getattr(final_decision, "action", None)
+        action_value = getattr(action, "value", action)
 
     if action_value == "run_workflow" or route_type in {"team", "workflow"}:
         return "final_synthesis"
@@ -241,8 +244,11 @@ def classify_routing_execution_policy(
     )
     normalized = normalize_execution_policy(policy)
 
-    action = getattr(final_decision, "action", None)
-    action_value = getattr(action, "value", action)
+    if isinstance(final_decision, dict):
+        action_value = final_decision.get("action")
+    else:
+        action = getattr(final_decision, "action", None)
+        action_value = getattr(action, "value", action)
 
     deterministic_route = action_value == "answer_locally" or (
         route_type in {"single_tool", "multi_tool"}
@@ -267,4 +273,47 @@ def classify_routing_execution_policy(
             "policy_source": "execution_policy",
         }
     )
+    return decision
+
+
+def _action_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return value.get("action")
+    action = getattr(value, "action", value)
+    return getattr(action, "value", action)
+
+
+def apply_safe_execution_policy_enforcement(
+    execution_policy_decision: dict[str, Any],
+    final_decision: Any = None,
+) -> dict[str, Any]:
+    """Apply safe, non-invasive enforcement metadata to a policy decision.
+
+    Alpha.6 only enforces deterministic/local routes that already resolved
+    without an external LLM. It does not force reroutes, block tools, or change
+    provider selection for generation, workflow, local-LLM, or premium-model
+    candidates.
+    """
+
+    decision = dict(execution_policy_decision or {})
+    final_action = _action_value(final_decision)
+    policy_action = decision.get("policy_action")
+
+    if final_action == "answer_locally" and policy_action == "deterministic_allowed":
+        decision["safe_enforcement"] = {
+            "enforced": True,
+            "scope": "deterministic_local_only",
+            "action": "enforce_local_execution",
+            "reason": "Deterministic/local execution was already selected, so external LLM usage remains disabled for this route.",
+            "external_llm_allowed": False,
+        }
+        return decision
+
+    decision["safe_enforcement"] = {
+        "enforced": False,
+        "scope": "observe_only",
+        "action": "no_enforcement",
+        "reason": "Execution policy remains advisory for this route.",
+        "external_llm_allowed": None,
+    }
     return decision

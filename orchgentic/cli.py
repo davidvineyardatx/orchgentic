@@ -5,7 +5,7 @@ import time
 from orchgentic.runtime.deterministic_formatter import DeterministicFormatter
 from orchgentic.runtime.deterministic_router import DeterministicRouter
 from orchgentic.runtime.cost_tracker import build_route_telemetry, append_route_log
-from orchgentic.runtime.execution_policy import classify_routing_execution_policy
+from orchgentic.runtime.execution_policy import classify_routing_execution_policy, apply_safe_execution_policy_enforcement
 import asyncio
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -202,6 +202,10 @@ async def _try_deterministic_route(task, cfg, registry, debug=False, tracer=None
         task,
         cfg,
         route_type=route_type,
+    )
+    execution_policy_decision = apply_safe_execution_policy_enforcement(
+        execution_policy_decision,
+        final_decision={'action': 'answer_locally'},
     )
 
     telemetry = build_route_telemetry(

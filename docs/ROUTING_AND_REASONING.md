@@ -254,3 +254,34 @@ workflow:
 ```
 
 This avoids implying that a workflow was meaningfully considered for simple single-agent jobs.
+
+
+## Safe Enforcement Metadata
+
+Policy-aware routing can now include `safe_enforcement` metadata.
+
+For deterministic/local routes, this shows that Orchgentic safely kept the route local:
+
+```text
+safe_enforcement:
+  enforced: true
+  scope: deterministic_local_only
+  action: enforce_local_execution
+  external_llm_allowed: false
+```
+
+For routes that require generation, workflow orchestration, local LLM evaluation, or premium model handling, enforcement remains observe-only.
+
+
+## Safe Enforcement Trace Coverage
+
+`execution_policy.classified` events include safe enforcement metadata when available.
+
+This lets dashboard and trace consumers distinguish between:
+
+```text
+deterministic/local routes that were safely kept local
+routes that remain observe-only
+```
+
+The metadata is intentionally non-invasive. It does not change team orchestration, provider selection, or tool policy decisions.

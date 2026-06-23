@@ -4,7 +4,7 @@ from orchgentic.runtime.token_estimator import estimate_route_savings
 from orchgentic.orchestration.context import SharedContext
 from orchgentic.core.exceptions import TeamError
 from orchgentic.runtime.preflight import CapabilityPreflight
-from orchgentic.runtime.execution_policy import classify_routing_execution_policy
+from orchgentic.runtime.execution_policy import classify_routing_execution_policy, apply_safe_execution_policy_enforcement
 from orchgentic.orchestration.synthesis_guardrails import (
     build_member_task,
     build_synthesis_task,
@@ -170,6 +170,10 @@ class TeamRunner:
             team_task,
             team_config,
             route_type="team",
+        )
+        team_execution_policy_decision = apply_safe_execution_policy_enforcement(
+            team_execution_policy_decision,
+            final_decision={'action': 'run_workflow'},
         )
 
         def _team_failed(exc: Exception):

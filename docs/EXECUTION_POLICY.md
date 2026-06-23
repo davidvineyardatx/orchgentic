@@ -310,3 +310,63 @@ policy_action: deterministic_allowed
 ```
 
 This does not enforce policy. It makes the judgment output match the actual execution path more clearly.
+
+
+## Safe Advisory Policy Enforcement
+
+In `v0.8.0-beta.4-alpha.6`, execution policy begins safe enforcement for deterministic/local routes only.
+
+This means:
+
+```text
+if the route already resolved locally
+and the policy classified it as deterministic_allowed
+then Orchgentic marks local execution as safely enforced
+and external LLM usage remains disabled for that route
+```
+
+The policy decision includes:
+
+```text
+safe_enforcement:
+  enforced: true
+  scope: deterministic_local_only
+  action: enforce_local_execution
+  external_llm_allowed: false
+```
+
+All other execution-policy cases remain advisory:
+
+```text
+safe_enforcement:
+  enforced: false
+  scope: observe_only
+  action: no_enforcement
+```
+
+This patch does not block tools, force reroutes, or change provider selection for generation, workflow, local-LLM, or premium-model candidates.
+
+
+## Runtime Trace Coverage
+
+In `v0.8.0-beta.4-alpha.7`, safe enforcement metadata is carried into runtime trace surfaces.
+
+The same `safe_enforcement` object used by `judge-route` is now available in:
+
+```text
+agent execution policy trace events
+deterministic route telemetry
+team execution policy trace events
+```
+
+Deterministic/local routes can show:
+
+```text
+safe_enforcement:
+  enforced: true
+  scope: deterministic_local_only
+  action: enforce_local_execution
+  external_llm_allowed: false
+```
+
+Team/workflow routes and generation routes remain observe-only.

@@ -3,7 +3,7 @@ from typing import Any
 
 from orchgentic.runtime.local_reasoner import LocalReasoner
 from orchgentic.runtime.escalation import EscalationDecision, EscalationEngine, default_escalation_policy
-from orchgentic.runtime.execution_policy import classify_routing_execution_policy
+from orchgentic.runtime.execution_policy import classify_routing_execution_policy, apply_safe_execution_policy_enforcement
 from orchgentic.core.routing import (
     EventContext,
     EventContextRouter,
@@ -67,6 +67,10 @@ def evaluate_orchestration_judgment(task: str, cfg=None, registry=None, event_co
         cfg,
         local_decision=local_decision,
         escalation=escalation,
+        final_decision=final,
+    )
+    execution_policy = apply_safe_execution_policy_enforcement(
+        execution_policy,
         final_decision=final,
     )
 
