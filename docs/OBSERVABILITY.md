@@ -1,208 +1,289 @@
 # Observability
 
-Orchgentic includes a native observability foundation for inspecting agent runs, tool runs, team runs, routing decisions, policy checks, provider calls, token usage, and estimated token savings.
+Orchgentic observability makes agent, team, tool, workflow, routing, and LLM activity inspectable.
+
+The core goal is:
+
+```text
+Every meaningful runtime decision should leave a trace.
+```
+
+Observability is not only for debugging. It is the proof layer for Orchgentic's local-first, token-aware execution model.
 
 ## What Observability Tracks
 
-Run records include:
+Orchgentic tracks:
+
+- runs
+- run status
+- run type
+- target agent or team
+- task
+- start time
+- completion time
+- failures
+- routing decisions
+- tool execution
+- LLM usage
+- estimated token savings
+- workflow metadata when a workflow is used
+
+Common run types include:
 
 ```text
-run_id
-run_type
-status
-task
-agent_id / agent_name
-team_id / team_name
-provider
-model
-started_at
-completed_at
-duration_ms
-external_llm_used
-input_tokens
-output_tokens
-total_tokens
-estimated_tokens_saved
-token_source
-error_type
-error_message
+agent
+team
+workflow
+tool
 ```
 
-Trace events include:
+## Core Commands
 
-```text
-timestamp
-event_type
-component
-name
-status
-message
-token fields
-event data
-```
-
-## Token Source Values
-
-```text
-actual
-estimated
-not_applicable
-unknown
-```
-
-Estimated token savings are labeled as estimates. They are useful for understanding avoided LLM routing/execution overhead, not for billing claims.
-
-## Common Commands
+### Show recent runs
 
 ```bash
 orch runs
-orch run-info <run_id>
-orch trace <run_id>
-orch export-run <run_id>
-orch export-runs --limit 100 --output exports/runs.jsonl
 ```
+
+Useful filters:
+
+```bash
+orch runs --type workflow
+orch runs --type team
+orch runs --status completed
+orch runs --status failed
+```
+
+### Inspect a run
+
+```bash
+orch run-info <run_id>
+```
+
+Use this to inspect one run's events, routing decisions, tool activity, token fields, and workflow metadata.
+
+For workflow runs, useful proof fields include:
+
+```text
+workflow_id
+workflow_name
+workflow_version
+workflow_source
+workflow_step
+```
+
+### Generate the dashboard
+
+```bash
+orch dashboard --limit 500
+```
+
+### Open the existing dashboard
+
+```bash
+orch dashboard --open
+```
+
+`--open` opens the latest generated dashboard without rebuilding it.
+
+### Check observability health
+
+```bash
+orch doctor observability
+```
+
+The doctor command checks whether the observability store, run data, event data, dashboard export path, and related runtime assumptions are healthy.
+
+### Clean generated test/runtime data
+
+Dry run:
+
+```bash
+orch clean-testdata
+```
+
+Verbose dry run:
+
+```bash
+orch clean-testdata --verbose
+```
+
+JSON dry run:
+
+```bash
+orch clean-testdata --json
+```
+
+Actual cleanup:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 orch clean-testdata --no-dry-run --confirm
+```
+
+PowerShell:
+
+```powershell
+$env:PYTHONDONTWRITEBYTECODE="1"; orch clean-testdata --no-dry-run --confirm
+```
+
+Cleanup is intended to remove generated runtime/test artifacts such as:
+
+```text
+logs/
+exports/
+memory/
+.pytest_cache/
+__pycache__/
+*.pyc
+```
+
+It should preserve source code, docs, agent configs, team configs, triggers, provider credentials, and `.env`.
 
 ## Dashboard
 
-Generate a dashboard:
+The observability dashboard is a static HTML report generated from local run data.
 
-```bash
-orch dashboard
-```
-
-Open the existing dashboard:
-
-```bash
-orch dashboard --open
-```
-
-Generate a filtered dashboard and then open it:
-
-```bash
-orch dashboard --team ContentTeam
-orch dashboard --open
-```
-
-`--open` opens the existing dashboard file and does not regenerate it.
-
-## Dashboard Pagination
-
-The dashboard paginates loaded rows in the browser.
+Recommended command:
 
 ```bash
 orch dashboard --limit 500
 orch dashboard --open
 ```
 
-`--limit` controls how many recent runs are loaded into the static HTML file. Browser controls paginate that loaded set.
+The dashboard is organized around the most useful operational questions:
 
-## Dashboard Controls
+1. What failed recently?
+2. What ran recently?
+3. Where did tokens go?
+4. What did Orchgentic avoid deterministically?
+5. What could move to a local LLM?
+6. What should remain premium/configurable?
 
-The dashboard includes:
-
-```text
-search box
-quick filters
-page size selector
-First / Previous / Next / Last
-visible/matching count
-modal run details
-copy buttons for CLI follow-up commands
-```
-
-## Exports
-
-Single run export:
-
-```bash
-orch export-run <run_id> --output exports/run.json
-```
-
-Run history export:
-
-```bash
-orch export-runs --limit 100 --output exports/runs.jsonl
-```
-
-Schema label:
+Current major dashboard sections:
 
 ```text
-orchgentic.observability.v1
+Recent Failures
+Recent Runs
+Token Intelligence
 ```
 
-## Observability Doctor
+Each major section should be collapsible so users can focus on the signal they need.
 
-Use the doctor command to check store and dashboard readiness:
+## Recent Failures
 
-```bash
-orch doctor observability
-```
+Recent Failures should help a developer quickly answer:
 
-JSON output:
+- what failed
+- which run failed
+- which agent/team/workflow failed
+- what the likely cause was
+- where to inspect details next
 
-```bash
-orch doctor observability --json
-```
+Failure diagnostics should prefer actionable language over raw trace dumps.
 
-The doctor reports:
+## Recent Runs
+
+Recent Runs shows completed and failed activity across agents, teams, tools, and workflows.
+
+Useful fields:
 
 ```text
-schema
-status
-store
-path
-runs
-events
-latest_run
-dashboard_output
-dashboard_exists
-exports_dir
-exports_dir_exists
-total_tokens
-estimated_tokens_saved
-hint
+Run
+Status
+Type
+Agent / Team
+Tokens
+Task
+Started
 ```
 
-Possible statuses:
+For workflow execution proof, a workflow run should appear with:
 
 ```text
-ok
-empty
-not_initialized
+Type = workflow
+Agent / Team = <mapped team>
 ```
 
-
-## Beta.1 Schema Stability
-
-For v0.8.0-beta.1, the public observability schema label is:
+Example:
 
 ```text
-orchgentic.observability.v1
+Run        Status      Type       Agent / Team   Tokens
+1626c34d   completed   workflow   ContentTeam    estimated tokens used=13749, source=estimated
 ```
 
-This label is used in dashboard metadata, doctor output, and observability export conventions.
+## Run Detail
 
-## v0.8.0-beta.2 clean-install behavior
+Run detail views should expose:
 
-The observability layer is expected to behave clearly before any runs exist. A fresh workspace can run:
+- run metadata
+- task
+- target
+- provider used
+- configured provider
+- external LLM usage
+- tool events
+- routing decisions
+- token usage
+- estimated token savings
+- proof events
+- failure details, if any
+
+For direct or deterministic runs, provider display should distinguish:
+
+```text
+provider used: N/A — no LLM used
+configured provider: groq / llama-3.3-70b-versatile
+external_llm_used: False
+```
+
+## Retention
+
+Observability data is local runtime data. Retention should be simple and predictable.
+
+The current cleanup path is:
 
 ```bash
-orch doctor observability
-orch dashboard
-orch dashboard --open
+orch clean-testdata --no-dry-run --confirm
 ```
 
-`orch doctor observability` reports store, dashboard, exports directory, run count, event count, and actionable next steps. `orch dashboard` can generate a zero-run dashboard with first-run guidance. `orch dashboard --open` opens an existing dashboard only and tells the user to generate one first when the file is missing.
+Future retention policy should support:
 
-## Token intelligence and local reasoning proof
+- max runs
+- max age
+- dashboard export cleanup
+- trace/event cleanup
+- safe dry-run reporting
 
-Orchgentic includes token intelligence reporting so teams can see when runs stayed local, when external LLMs were used, and which trace events prove estimated token savings.
+## Workflow Observability
 
-Use:
+Workflows are for coordinated, multi-step, team-backed execution.
 
-```bash
-orch token-report
-orch token-report --json
+Simple one-agent or one-tool tasks should use agents and direct tools, not workflows.
+
+When a workflow is executed, observability should show:
+
+```text
+type = workflow
+workflow_id = <workflow_id>
+workflow_name = <workflow_name>
+workflow_version = <version>
+target = <team>
 ```
 
-The report highlights `routing.bypassed`, `routing.completed`, `reasoning.completed`, and `llm.*` events. This helps prove that deterministic routing, direct tool execution, and local reasoning avoided unnecessary LLM usage.
+Workflow execution should also preserve the team-backed execution trace so Token Intelligence can still classify routing, tool decisions, and LLM usage.
+
+## Observability Design Rules
+
+- Do not hide whether an LLM was used.
+- Do not hide why an LLM was used.
+- Do not mix configured provider with provider actually used.
+- Do not present estimated token savings as billing claims.
+- Prefer concise reason strings that are readable in the CLI and dashboard.
+- Every optimization claim should be traceable to an event.
+
+## Related Docs
+
+- `TOKEN_INTELLIGENCE.md`
+- `WORKFLOWS.md`
+- `ROUTING_AND_REASONING.md`
+- `RELEASE_VALIDATION.md`

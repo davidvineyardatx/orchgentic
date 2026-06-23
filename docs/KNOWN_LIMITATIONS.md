@@ -1,6 +1,6 @@
 # Known Limitations
 
-Orchgentic v0.7.12 is a developer preview release focused on the core orchestration foundation.
+Orchgentic is a developer preview release focused on the core orchestration foundation.
 
 The current release includes agent configuration, tool execution, memory, knowledge search, planning, reflection, local reasoning, routing, policy-aware escalation, Gmail tool safety, and multi-agent team orchestration.
 

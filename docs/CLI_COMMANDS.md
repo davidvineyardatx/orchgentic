@@ -31,9 +31,29 @@ Direct tool runs are observable and can record estimated token savings when they
 
 ## Team Commands
 
+Create a starter team YAML file:
+
 ```bash
-orch run-team ContentTeam
-orch run-team ContentTeam --debug
+orch create-team MarketingTeam
+orch create-team MarketingTeam --members Researcher,Writer,Reviewer
+orch create-team MarketingTeam --member Researcher --member Writer --member Reviewer
+orch create-team MarketingTeam --orchestrator Manager
+orch create-team MarketingTeam --overwrite
+```
+
+This creates:
+
+```text
+teams/marketingteam.yaml
+```
+
+Inspect and run a team:
+
+```bash
+orch list-teams
+orch inspect-team MarketingTeam
+orch preflight-team MarketingTeam --task "Test this team setup"
+orch run-team MarketingTeam --debug
 ```
 
 ## Routing and Reasoning
@@ -46,6 +66,44 @@ orch judge-route "send an email to studio@example.com saying hello" --agent Bob
 ```
 
 `judge-route` is analysis-only. Use `orch run` or `orch tool run` for execution.
+
+## Configuration Docs
+
+Important setup references:
+
+```text
+docs/CORE_YAML_CONTRACTS.md
+docs/PROVIDERS.md
+docs/AGENT_CONFIGURATION.md
+docs/TEAM_CONFIGURATION.md
+docs/WORKFLOWS.md
+```
+
+## Provider Configuration
+
+Providers are configured in agent YAML files, not with a CLI command.
+
+Examples:
+
+```yaml
+provider:
+  type: openai
+  model: gpt-4.1-mini
+```
+
+```yaml
+provider:
+  type: xai
+  model: grok-3-mini
+```
+
+```yaml
+provider:
+  type: anthropic
+  model: claude-3-5-sonnet-latest
+```
+
+See `docs/PROVIDERS.md` for supported provider types and environment variables.
 
 ## Observability Commands
 
@@ -313,16 +371,3 @@ git status
 ```
 
 After this final cleanup, avoid running `pytest`, `python`, or `orch` again before checking and committing, because those commands can recreate bytecode cache files.
-
-## Token intelligence
-
-```bash
-orch token-report
-orch token-report --limit 100
-orch token-report --status completed
-orch token-report --type tool
-orch token-report --agent Bob
-orch token-report --json
-```
-
-`orch token-report` summarizes local runs, external LLM runs, direct tool bypasses, deterministic routes, local reasoning events, LLM events, estimated tokens saved, and proof events. Estimated token savings are operational estimates, not billing claims.

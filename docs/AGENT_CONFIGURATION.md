@@ -2,6 +2,24 @@
 
 Agents are configured with YAML files in the `agents/` folder. Each file describes the agent's identity, provider, tools, policies, routing behavior, reasoning settings, memory, and knowledge configuration.
 
+## Minimal agent YAML
+
+The bare minimum should probably be:
+```yaml
+agent:
+  id: bob
+  name: Bob
+  role: General Assistant
+  instructions: |
+    You are Bob, a helpful AI assistant.
+
+  provider:
+    type: groq
+    model: llama-3.3-70b-versatile
+```
+Everything else should be optional with sonme defaults.
+
+
 The example below is a full `agents/bob.yaml` for v0.7.12.
 
 ## Full `bob.yaml`
@@ -61,7 +79,7 @@ agent:
       send_policy:
         mode: restricted
         allowed_addresses:
-          - studio@example.com
+          - you@example.com
         allowed_domains: []
         require_confirmation: true
 
@@ -108,8 +126,6 @@ agent:
     db_path: memory/orchgentic.db
     collection: orchgentic_knowledge
 ```
-
-Replace `studio@example.com` with an address you actually want to allow.
 
 ## Section-by-section walkthrough
 

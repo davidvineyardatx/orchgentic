@@ -2,6 +2,28 @@
 
 Teams are configured with YAML files in the `teams/` folder. A team defines an orchestrator, members, shared context behavior, and a default task prompt.
 
+## Minimal team YAML
+The bare minimum should be:
+```yaml
+team:
+  id: marketingteam
+  name: MarketingTeam
+  orchestrator: Manager
+
+  members:
+    - Researcher
+    - Writer
+    - Reviewer
+
+  task_prompt: |
+    Produce a clear, useful response using the team's specialists.
+
+Optional:
+
+shared_context: true
+max_rounds: 3
+```
+
 ## Example `teams/contentteam.yaml`
 
 ```yaml

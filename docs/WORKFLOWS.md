@@ -4,6 +4,25 @@ Orchgentic workflows are declarative execution contracts that describe how agent
 
 In v0.8.x, workflows are introduced as visible YAML blueprints. They are intended to make execution policy and cost-control behavior explicit before the full v0.9 workflow runtime is stabilized.
 
+## Minimal workflow YAML
+
+Since workflows are team-backed, the bare minimum should be:
+```yaml
+workflow:
+  id: content_summary
+  name: Content Summary
+  version: 0.1.0
+
+  team:
+    id: contentteam
+    name: ContentTeam
+
+  steps:
+    - id: run_team
+      name: Run team
+      action: run_team
+```
+
 ## Why Workflows Matter
 
 A workflow gives Orchgentic a clear contract for:

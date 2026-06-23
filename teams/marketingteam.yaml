@@ -1,0 +1,17 @@
+team:
+  id: marketingteam
+  name: MarketingTeam
+  description: MarketingTeam team created by Orchgentic.
+
+  orchestrator: Manager
+
+  members:
+    - Researcher
+    - Writer
+    - Reviewer
+
+  shared_context: true
+  max_rounds: 3
+
+  task: |
+    Coordinate the team to complete the requested task.
