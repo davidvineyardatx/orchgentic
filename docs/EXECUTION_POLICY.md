@@ -482,3 +482,40 @@ policy classification can read the tier settings
 runtime routing behavior is unchanged
 local LLM execution is not enabled yet
 ```
+
+
+## Execution Tier Validation
+
+`v0.8.0-beta.5-alpha.2` adds advisory validation for execution-tier configuration.
+
+Validation checks for:
+
+```text
+local_llm.enabled without provider
+local_llm.enabled without model
+unknown local_llm provider
+empty local_llm.eligible_for
+external_llm disabled
+deterministic execution disabled
+```
+
+Validation does not change runtime routing behavior.
+
+Expected validation result shape:
+
+```text
+status
+valid
+errors
+warnings
+execution_tiers
+routing_behavior_changed: false
+```
+
+Known local/compatible local LLM providers:
+
+```text
+lmstudio
+ollama
+openai_compatible
+```

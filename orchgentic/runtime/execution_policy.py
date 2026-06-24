@@ -371,3 +371,90 @@ def summarize_execution_policy_enforcement(decision: dict[str, Any]) -> dict[str
 
     policy["enforcement_summary"] = summary
     return policy
+
+
+SUPPORTED_LOCAL_LLM_PROVIDERS = {
+    "lmstudio",
+    "ollama",
+    "openai_compatible",
+}
+
+
+def validate_execution_tiers(config_or_policy: Any = None) -> dict[str, Any]:
+    """Validate execution-tier configuration without changing routing behavior.
+
+    Alpha.2 is advisory validation only. It returns errors/warnings that can be
+    surfaced by CLI/docs/tests later, but it does not block execution.
+    """
+
+    tiers = normalize_execution_tiers(config_or_policy)
+    errors: list[dict[str, str]] = []
+    warnings: list[dict[str, str]] = []
+
+    provider = (tiers.local_llm_provider or "").strip()
+    model = (tiers.local_llm_model or "").strip() if tiers.local_llm_model is not None else None
+
+    if tiers.local_llm_enabled:
+        if not provider:
+            errors.append(
+                {
+                    "field": "execution_tiers.local_llm.provider",
+                    "code": "missing_local_llm_provider",
+                    "message": "local_llm is enabled but no provider is configured.",
+                }
+            )
+        elif provider not in SUPPORTED_LOCAL_LLM_PROVIDERS:
+            warnings.append(
+                {
+                    "field": "execution_tiers.local_llm.provider",
+                    "code": "unknown_local_llm_provider",
+                    "message": f"local_llm provider '{provider}' is not one of the known local/compatible providers.",
+                }
+            )
+
+        if not model:
+            warnings.append(
+                {
+                    "field": "execution_tiers.local_llm.model",
+                    "code": "missing_local_llm_model",
+                    "message": "local_llm is enabled without a model. Routing behavior is unchanged, but local LLM readiness is incomplete.",
+                }
+            )
+
+        if not tiers.local_llm_eligible_for:
+            warnings.append(
+                {
+                    "field": "execution_tiers.local_llm.eligible_for",
+                    "code": "empty_local_llm_eligible_for",
+                    "message": "local_llm is enabled but no eligible task purposes are configured.",
+                }
+            )
+
+    if not tiers.external_llm_enabled:
+        warnings.append(
+            {
+                "field": "execution_tiers.external_llm.enabled",
+                "code": "external_llm_disabled",
+                "message": "external_llm is disabled. This may prevent complex generation or escalation once enforcement is expanded.",
+            }
+        )
+
+    if not tiers.deterministic_enabled:
+        warnings.append(
+            {
+                "field": "execution_tiers.deterministic.enabled",
+                "code": "deterministic_disabled",
+                "message": "deterministic execution is disabled. This can reduce token-saving opportunities.",
+            }
+        )
+
+    status = "valid" if not errors else "invalid"
+
+    return {
+        "status": status,
+        "valid": not errors,
+        "errors": errors,
+        "warnings": warnings,
+        "execution_tiers": tiers.to_dict(),
+        "routing_behavior_changed": False,
+    }

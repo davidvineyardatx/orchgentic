@@ -12,6 +12,7 @@ Planned beta.5 milestones:
 
 ```text
 v0.8.0-beta.5-alpha.1 — Execution Tier Config Normalization
+v0.8.0-beta.5-alpha.2 — Execution Tier Validation
 ```
 
 Scope boundary:
