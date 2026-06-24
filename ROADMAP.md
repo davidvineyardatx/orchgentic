@@ -1,5 +1,31 @@
 # Orchgentic Roadmap
 
+
+## Current Track: v0.8.0-beta.6 — Tool/plugin contract stabilization
+
+Goal:
+
+```text
+Freeze tool schema, confirmation behavior, and plugin shape.
+```
+
+Planned beta.6 milestones:
+
+```text
+v0.8.0-beta.6-alpha.1 — Tool Contract Inventory and Schema Baseline
+v0.8.0-beta.6-alpha.2 — Tool Confirmation Contract Baseline
+```
+
+Scope boundary:
+
+```text
+No new tools.
+No external plugin marketplace.
+No UI work.
+No execution behavior changes.
+No local LLM work.
+```
+
 ## Current Track: v0.8.0-beta.5 — Execution Tier Configuration and Local LLM Readiness
 
 Goal:
@@ -14,6 +40,7 @@ Planned beta.5 milestones:
 v0.8.0-beta.5-alpha.1 — Execution Tier Config Normalization
 v0.8.0-beta.5-alpha.2 — Execution Tier Validation
 v0.8.0-beta.5-alpha.3 — Execution Tier Doctor Checks
+v0.8.0-beta.5-alpha.4 — Execution Tier Examples and Defaults
 ```
 
 Scope boundary:

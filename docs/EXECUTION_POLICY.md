@@ -543,3 +543,105 @@ warnings
 ```
 
 This is validation only. It does not execute local LLM calls or change routing behavior.
+
+
+## Execution Tier Examples and Defaults
+
+`v0.8.0-beta.5-alpha.4` adds documentation examples for execution-tier configuration.
+
+Example file:
+
+```text
+docs/examples/execution_tiers.yaml
+```
+
+The examples cover:
+
+```text
+default local_llm disabled posture
+LM Studio readiness
+Ollama readiness
+OpenAI-compatible local/edge endpoint readiness
+```
+
+These examples are configuration readiness only.
+
+They do not enable local LLM execution by themselves and do not change routing behavior.
+
+### Default disabled posture
+
+```yaml
+execution_tiers:
+  deterministic:
+    enabled: true
+
+  local_reasoning:
+    enabled: true
+
+  local_llm:
+    enabled: false
+    provider: lmstudio
+    model: null
+    eligible_for:
+      - classification
+      - routing
+      - summarization
+      - review
+
+  external_llm:
+    enabled: true
+    require_for:
+      - complex_generation
+      - high_uncertainty_reasoning
+
+  premium_model:
+    enabled: true
+    require_for:
+      - final_synthesis
+      - executive_output
+      - high_quality_final
+```
+
+### LM Studio readiness
+
+```yaml
+execution_tiers:
+  local_llm:
+    enabled: true
+    provider: lmstudio
+    model: qwen3
+    eligible_for:
+      - routing
+      - classification
+      - summarization
+      - review
+```
+
+### Ollama readiness
+
+```yaml
+execution_tiers:
+  local_llm:
+    enabled: true
+    provider: ollama
+    model: llama3.1
+    eligible_for:
+      - routing
+      - classification
+      - review
+```
+
+### OpenAI-compatible readiness
+
+```yaml
+execution_tiers:
+  local_llm:
+    enabled: true
+    provider: openai_compatible
+    model: local-model
+    eligible_for:
+      - routing
+      - classification
+      - summarization
+      - review
+```
