@@ -519,3 +519,27 @@ lmstudio
 ollama
 openai_compatible
 ```
+
+
+## Execution Tier Doctor Checks
+
+`v0.8.0-beta.5-alpha.3` surfaces execution-tier validation through the existing doctor flow.
+
+```bash
+orch doctor execution-tiers --agent Bob
+orch doctor execution-tiers --agent Bob --json
+```
+
+The doctor command reports:
+
+```text
+agent
+status
+valid
+routing_behavior_changed
+local_llm enabled/provider/model/eligible_for
+errors
+warnings
+```
+
+This is validation only. It does not execute local LLM calls or change routing behavior.

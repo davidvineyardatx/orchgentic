@@ -5,7 +5,8 @@ import time
 from orchgentic.runtime.deterministic_formatter import DeterministicFormatter
 from orchgentic.runtime.deterministic_router import DeterministicRouter
 from orchgentic.runtime.cost_tracker import build_route_telemetry, append_route_log
-from orchgentic.runtime.execution_policy import classify_routing_execution_policy, apply_safe_execution_policy_enforcement
+from orchgentic.runtime.execution_policy import classify_routing_execution_policy, apply_safe_execution_policy_enforcement, validate_execution_tiers
+from orchgentic.runtime.execution_tier_doctor import format_execution_tier_doctor
 import asyncio
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -950,6 +951,53 @@ def _format_observability_doctor(payload: dict) -> str:
         for step in next_steps:
             lines.append(f"  - {step}")
     return "\n".join(lines)
+
+
+
+
+def _format_execution_tier_doctor(payload: dict) -> str:
+    lines = ["EXECUTION TIER DOCTOR"]
+    lines.append(f"agent: {payload.get('agent')}")
+    lines.append(f"status: {payload.get('status')}")
+    lines.append(f"valid: {payload.get('valid')}")
+    lines.append(f"routing_behavior_changed: {payload.get('routing_behavior_changed')}")
+    tiers = payload.get("execution_tiers") or {}
+    local_llm = tiers.get("local_llm") or {}
+    lines.append("local_llm:")
+    lines.append(f"  enabled: {local_llm.get('enabled')}")
+    lines.append(f"  provider: {local_llm.get('provider')}")
+    lines.append(f"  model: {local_llm.get('model')}")
+    eligible_for = local_llm.get("eligible_for") or []
+    lines.append(f"  eligible_for: {', '.join(eligible_for) if eligible_for else '-'}")
+
+    errors = payload.get("errors") or []
+    warnings = payload.get("warnings") or []
+    if errors:
+        lines.append("errors:")
+        for item in errors:
+            lines.append(f"  - {item.get('code')}: {item.get('message')}")
+    if warnings:
+        lines.append("warnings:")
+        for item in warnings:
+            lines.append(f"  - {item.get('code')}: {item.get('message')}")
+    if not errors and not warnings:
+        lines.append("checks: no execution-tier issues found")
+    return "\n".join(lines)
+
+
+@doctor_app.command("execution-tiers")
+def doctor_execution_tiers(
+    agent_name: str = typer.Option("Bob", "--agent", help="Agent config to validate."),
+    json_output: bool = typer.Option(False, "--json", help="Output doctor result as JSON."),
+):
+    """Validate execution-tier readiness for an agent config."""
+    cfg = load_agent(_agent_path(agent_name))
+    result = validate_execution_tiers(cfg)
+    payload = {
+        "agent": cfg.name,
+        **result,
+    }
+    typer.echo(json.dumps(payload, indent=2, sort_keys=True, default=str) if json_output else format_execution_tier_doctor(payload))
 
 
 @doctor_app.command("observability")
