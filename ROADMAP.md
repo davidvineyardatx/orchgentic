@@ -14,6 +14,8 @@ Planned beta.6 milestones:
 ```text
 v0.8.0-beta.6-alpha.1 — Tool Contract Inventory and Schema Baseline
 v0.8.0-beta.6-alpha.2 — Tool Confirmation Contract Baseline
+v0.8.0-beta.6-alpha.3 — Tool Confirmation Runtime Consistency
+v0.8.0-beta.6-alpha.4 — Plugin Tool Contract Shape Baseline
 ```
 
 Scope boundary:

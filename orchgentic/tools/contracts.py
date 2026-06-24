@@ -248,8 +248,54 @@ BUILTIN_TOOL_CONTRACTS: tuple[ToolContract, ...] = (
 _TOOL_CONTRACTS_BY_NAME = {contract.name: contract for contract in BUILTIN_TOOL_CONTRACTS}
 
 
+
+def infer_tool_contract_metadata(data: dict[str, Any]) -> dict[str, Any]:
+    """Infer safe contract metadata from a tool definition.
+
+    Registry tools remain the source of truth. This helper fills contract
+    metadata from the tool name and input schema when the tool class has not
+    declared metadata explicitly.
+    """
+
+    name = str(data.get("name") or "").lower()
+    input_schema = data.get("input_schema") or {}
+    properties = input_schema.get("properties", {}) if isinstance(input_schema, dict) else {}
+    category = name.split(".", 1)[0] if "." in name else "general"
+
+    side_effect = "none"
+    if name.endswith(".search") or name.endswith(".read") or name in {"datetime.now", "datetime.local"}:
+        side_effect = "read"
+    if name.endswith(".write") or name.endswith(".draft"):
+        side_effect = "write"
+    if name.endswith(".send") or name.endswith(".reply"):
+        side_effect = "send"
+    if name.endswith(".delete"):
+        side_effect = "delete"
+    if name == "web.request":
+        side_effect = "network"
+    if name == "delegate.agent":
+        side_effect = "delegate"
+
+    destructive = side_effect in {"send", "delete"} or name == "filesystem.write"
+    supports_confirmation = "confirm" in properties
+    requires_policy_check = name.startswith("gmail.") or name == "delegate.agent" or destructive or supports_confirmation
+
+    return {
+        "category": category,
+        "side_effect": side_effect,
+        "destructive": destructive,
+        "supports_confirmation": supports_confirmation,
+        "requires_policy_check": requires_policy_check,
+    }
+
+
 def normalize_tool_contract(definition: Any, *, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Normalize a tool definition plus optional metadata into the contract shape."""
+    """Normalize a tool definition plus optional metadata into the contract shape.
+
+    Runtime registry definitions are the intended source of truth. Tool classes
+    can declare metadata directly as attributes; otherwise safe defaults are
+    inferred from the tool name and input schema.
+    """
 
     if hasattr(definition, "to_dict"):
         data = definition.to_dict()
@@ -260,21 +306,60 @@ def normalize_tool_contract(definition: Any, *, metadata: dict[str, Any] | None 
             "name": getattr(definition, "name", None),
             "description": getattr(definition, "description", None),
             "input_schema": getattr(definition, "input_schema", None),
+            "category": getattr(definition, "category", None),
+            "side_effect": getattr(definition, "side_effect", None),
+            "destructive": getattr(definition, "destructive", None),
+            "supports_confirmation": getattr(definition, "supports_confirmation", None),
+            "requires_policy_check": getattr(definition, "requires_policy_check", None),
+            "builtin": getattr(definition, "builtin", None),
+            "notes": getattr(definition, "notes", None),
+            "plugin": getattr(definition, "plugin", None),
         }
 
     extra = dict(metadata or {})
-    return ToolContract(
+    inferred = infer_tool_contract_metadata(data)
+
+    payload = ToolContract(
         name=str(data.get("name") or ""),
         description=str(data.get("description") or ""),
         input_schema=dict(data.get("input_schema") or _schema()),
-        category=str(extra.get("category", "general")),
-        side_effect=str(extra.get("side_effect", "none")),
-        destructive=bool(extra.get("destructive", False)),
-        supports_confirmation=bool(extra.get("supports_confirmation", False)),
-        requires_policy_check=bool(extra.get("requires_policy_check", False)),
-        builtin=bool(extra.get("builtin", False)),
-        notes=extra.get("notes"),
+        category=str(extra.get("category", data.get("category") or inferred["category"])),
+        side_effect=str(extra.get("side_effect", data.get("side_effect") or inferred["side_effect"])),
+        destructive=bool(extra.get("destructive", data.get("destructive") if data.get("destructive") is not None else inferred["destructive"])),
+        supports_confirmation=bool(extra.get("supports_confirmation", data.get("supports_confirmation") if data.get("supports_confirmation") is not None else inferred["supports_confirmation"])),
+        requires_policy_check=bool(extra.get("requires_policy_check", data.get("requires_policy_check") if data.get("requires_policy_check") is not None else inferred["requires_policy_check"])),
+        builtin=bool(extra.get("builtin", data.get("builtin") if data.get("builtin") is not None else False)),
+        notes=extra.get("notes", data.get("notes")),
     ).to_dict()
+
+    if data.get("plugin") is not None:
+        payload["plugin"] = dict(data.get("plugin") or {})
+    if "plugin" in extra:
+        payload["plugin"] = dict(extra.get("plugin") or {})
+    return payload
+
+
+def get_tool_contracts_from_registry(registry: Any, allowed: list[str] | None = None) -> list[dict[str, Any]]:
+    """Normalize contracts from the tool registry.
+
+    This is the user-friendly path: add a tool to the registry, and Orchgentic
+    can derive and validate its contract from the registered tool definition.
+    """
+
+    tools = []
+    if hasattr(registry, "items") and isinstance(getattr(registry, "items"), dict):
+        tools = list(registry.items.values())
+    elif hasattr(registry, "definitions"):
+        return [
+            normalize_tool_contract(definition, metadata={"builtin": True})
+            for definition in registry.definitions(allowed=allowed)
+        ]
+
+    if allowed:
+        allowed_set = {name.lower() for name in allowed}
+        tools = [tool for tool in tools if str(getattr(tool, "name", "")).lower() in allowed_set]
+
+    return [normalize_tool_contract(tool, metadata={"builtin": True}) for tool in tools]
 
 
 def get_builtin_tool_contracts(allowed: list[str] | None = None) -> list[dict[str, Any]]:
@@ -430,3 +515,251 @@ def validate_confirmation_contract(contract_or_name: Any) -> dict[str, Any]:
         "confirmation": confirmation,
         "runtime_behavior_changed": False,
     }
+
+
+GMAIL_RUNTIME_CONFIRMATION_TOOLS = {
+    "gmail.draft",
+    "gmail.send",
+    "gmail.reply",
+    "gmail.delete",
+}
+
+
+def get_runtime_confirmation_consistency(contract_or_name: Any) -> dict[str, Any]:
+    """Compare frozen confirmation contract metadata to current runtime baseline.
+
+    This is inspection-only. It does not call or modify tool execution.
+    """
+
+    if isinstance(contract_or_name, str):
+        contract = get_builtin_tool_contract(contract_or_name)
+        if contract is None:
+            raise KeyError(f"Unknown tool contract: {contract_or_name}")
+    elif isinstance(contract_or_name, dict):
+        contract = dict(contract_or_name)
+    else:
+        contract = normalize_tool_contract(contract_or_name)
+
+    confirmation = get_confirmation_contract(contract["name"] if isinstance(contract, dict) and contract.get("name") in _TOOL_CONTRACTS_BY_NAME else contract)
+    name = confirmation["name"]
+
+    known_builtin_runtime = name in _TOOL_CONTRACTS_BY_NAME
+    runtime_supports_confirmation = name in GMAIL_RUNTIME_CONFIRMATION_TOOLS
+    runtime_requires_policy_check = name.startswith("gmail.")
+    runtime_confirm_argument = runtime_supports_confirmation
+
+    if not known_builtin_runtime:
+        runtime_supports_confirmation = confirmation["supports_confirmation"]
+        runtime_requires_policy_check = confirmation["requires_policy_check"]
+        runtime_confirm_argument = confirmation["requires_confirm_input"]
+
+    consistent = (
+        confirmation["supports_confirmation"] == runtime_supports_confirmation
+        and confirmation["requires_confirm_input"] == runtime_confirm_argument
+    )
+
+    notes: list[str] = []
+    if name == "filesystem.write":
+        notes.append("Current runtime baseline remains destructive without confirmation enforcement.")
+    if name in GMAIL_RUNTIME_CONFIRMATION_TOOLS:
+        notes.append("Current runtime baseline enforces confirmation through Gmail tool policy.")
+    if not known_builtin_runtime:
+        notes.append("Runtime confirmation behavior is inferred from the registered tool contract.")
+
+    return {
+        "name": name,
+        "contract_supports_confirmation": confirmation["supports_confirmation"],
+        "contract_requires_confirm_input": confirmation["requires_confirm_input"],
+        "runtime_supports_confirmation": runtime_supports_confirmation,
+        "runtime_confirm_argument": runtime_confirm_argument,
+        "contract_requires_policy_check": confirmation["requires_policy_check"],
+        "runtime_requires_policy_check": runtime_requires_policy_check,
+        "consistent": consistent,
+        "runtime_behavior_changed": False,
+        "notes": notes,
+    }
+
+
+def get_builtin_runtime_confirmation_consistency() -> list[dict[str, Any]]:
+    """Return runtime confirmation consistency metadata for all built-in tools."""
+
+    return [get_runtime_confirmation_consistency(contract.to_dict()) for contract in BUILTIN_TOOL_CONTRACTS]
+
+
+PLUGIN_TOOL_CONTRACT_REQUIRED_FIELDS = {
+    "name",
+    "description",
+    "input_schema",
+    "plugin",
+}
+
+
+def normalize_plugin_tool_contract(definition: Any, *, plugin: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Normalize a future plugin tool contract without loading or executing plugins.
+
+    This is contract-shape work only. It does not discover, import, register, or
+    run external plugin tools.
+    """
+
+    metadata = {"builtin": False}
+    if plugin is not None:
+        metadata["plugin"] = dict(plugin)
+
+    contract = normalize_tool_contract(definition, metadata=metadata)
+
+    if "plugin" not in contract:
+        contract["plugin"] = {}
+    contract["builtin"] = False
+    return contract
+
+
+def validate_plugin_tool_contract(contract: Any) -> dict[str, Any]:
+    """Validate future plugin tool contract shape without plugin loading."""
+
+    data = normalize_plugin_tool_contract(contract) if not isinstance(contract, dict) or contract.get("builtin") is not False else dict(contract)
+    errors: list[dict[str, str]] = []
+    warnings: list[dict[str, str]] = []
+
+    missing = sorted(field for field in PLUGIN_TOOL_CONTRACT_REQUIRED_FIELDS if field not in data)
+    for field in missing:
+        errors.append(
+            {
+                "field": field,
+                "code": "missing_plugin_contract_field",
+                "message": f"Plugin tool contract is missing required field '{field}'.",
+            }
+        )
+
+    plugin = data.get("plugin") or {}
+    if not isinstance(plugin, dict):
+        errors.append(
+            {
+                "field": "plugin",
+                "code": "invalid_plugin_metadata",
+                "message": "Plugin metadata must be an object.",
+            }
+        )
+        plugin = {}
+
+    for field in ["name", "version"]:
+        if not plugin.get(field):
+            errors.append(
+                {
+                    "field": f"plugin.{field}",
+                    "code": "missing_plugin_metadata",
+                    "message": f"Plugin metadata is missing '{field}'.",
+                }
+            )
+
+    if data.get("builtin") is not False:
+        errors.append(
+            {
+                "field": "builtin",
+                "code": "plugin_contract_must_not_be_builtin",
+                "message": "Plugin tool contracts must set builtin to false.",
+            }
+        )
+
+    name = str(data.get("name") or "")
+    if name and "." not in name:
+        warnings.append(
+            {
+                "field": "name",
+                "code": "plugin_tool_name_should_be_namespaced",
+                "message": "Plugin tool names should be namespaced, for example vendor.tool_name.",
+            }
+        )
+
+    base_validation = validate_tool_contract(data)
+    for item in base_validation.get("errors", []):
+        errors.append(item)
+    for item in base_validation.get("warnings", []):
+        warnings.append(item)
+
+    return {
+        "valid": not errors,
+        "status": "valid" if not errors else "invalid",
+        "errors": errors,
+        "warnings": warnings,
+        "contract": data,
+        "plugin_loader_added": False,
+        "runtime_behavior_changed": False,
+    }
+
+
+def _collect_contract_validation_payload(contracts: list[dict[str, Any]]) -> dict[str, Any]:
+    tool_results = []
+    confirmation_results = []
+    runtime_results = []
+
+    errors: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
+
+    for contract in contracts:
+        name = contract.get("name")
+        tool_result = validate_tool_contract(contract)
+        confirmation_result = validate_confirmation_contract(contract)
+        runtime_result = get_runtime_confirmation_consistency(contract)
+
+        tool_results.append({"name": name, **tool_result})
+        confirmation_results.append({"name": name, **confirmation_result})
+        runtime_results.append(runtime_result)
+
+        for item in tool_result.get("errors", []):
+            if isinstance(item, dict):
+                errors.append({"tool": name, **item})
+            else:
+                errors.append({"tool": name, "field": "contract", "code": "invalid_tool_contract", "message": str(item)})
+        for item in confirmation_result.get("errors", []):
+            errors.append({"tool": name, **item})
+        for item in tool_result.get("warnings", []):
+            if isinstance(item, dict):
+                warnings.append({"tool": name, **item})
+            else:
+                warnings.append({"tool": name, "field": "contract", "code": "tool_contract_warning", "message": str(item)})
+        for item in confirmation_result.get("warnings", []):
+            warnings.append({"tool": name, **item})
+
+        if name in _TOOL_CONTRACTS_BY_NAME and runtime_result.get("consistent") is not True:
+            errors.append(
+                {
+                    "tool": name,
+                    "field": "runtime_confirmation",
+                    "code": "runtime_confirmation_inconsistent",
+                    "message": "Runtime confirmation metadata does not match the frozen built-in contract baseline.",
+                }
+            )
+
+    return {
+        "valid": not errors,
+        "status": "valid" if not errors else "invalid",
+        "errors": errors,
+        "warnings": warnings,
+        "tool_count": len(tool_results),
+        "tool_contracts": tool_results,
+        "confirmation_contracts": confirmation_results,
+        "runtime_confirmation_consistency": runtime_results,
+        "plugin_loader_added": False,
+        "runtime_behavior_changed": False,
+    }
+
+
+def validate_tool_registry_contracts(registry: Any) -> dict[str, Any]:
+    """Validate registered tools as the source of truth."""
+
+    contracts = get_tool_contracts_from_registry(registry)
+    payload = _collect_contract_validation_payload(contracts)
+    payload["source"] = "registry"
+    return payload
+
+
+def validate_builtin_tool_contracts() -> dict[str, Any]:
+    """Validate the static built-in baseline snapshot.
+
+    This remains available for regression tests. Runtime doctor checks should
+    prefer validate_tool_registry_contracts(default_tool_registry()).
+    """
+
+    payload = _collect_contract_validation_payload(get_builtin_tool_contracts())
+    payload["source"] = "builtin_snapshot"
+    return payload

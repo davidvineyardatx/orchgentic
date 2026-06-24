@@ -7,6 +7,8 @@ from orchgentic.runtime.deterministic_router import DeterministicRouter
 from orchgentic.runtime.cost_tracker import build_route_telemetry, append_route_log
 from orchgentic.runtime.execution_policy import classify_routing_execution_policy, apply_safe_execution_policy_enforcement, validate_execution_tiers
 from orchgentic.runtime.execution_tier_doctor import format_execution_tier_doctor
+from orchgentic.tools.contracts import validate_tool_registry_contracts
+from orchgentic.tools.contract_doctor import format_tool_contract_doctor
 import asyncio
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -983,6 +985,42 @@ def _format_execution_tier_doctor(payload: dict) -> str:
     if not errors and not warnings:
         lines.append("checks: no execution-tier issues found")
     return "\n".join(lines)
+
+
+
+
+def _format_tool_contract_doctor(payload: dict) -> str:
+    lines = ["TOOL CONTRACT DOCTOR"]
+    lines.append(f"status: {payload.get('status')}")
+    lines.append(f"valid: {payload.get('valid')}")
+    lines.append(f"tool_count: {payload.get('tool_count')}")
+    lines.append(f"plugin_loader_added: {payload.get('plugin_loader_added')}")
+    lines.append(f"runtime_behavior_changed: {payload.get('runtime_behavior_changed')}")
+
+    errors = payload.get("errors") or []
+    warnings = payload.get("warnings") or []
+    if errors:
+        lines.append("errors:")
+        for item in errors:
+            tool = item.get("tool") or "-"
+            lines.append(f"  - {tool}: {item.get('code')}: {item.get('message')}")
+    if warnings:
+        lines.append("warnings:")
+        for item in warnings:
+            tool = item.get("tool") or "-"
+            lines.append(f"  - {tool}: {item.get('code')}: {item.get('message')}")
+    if not errors and not warnings:
+        lines.append("checks: all built-in tool contracts match the frozen baseline")
+    return "\n".join(lines)
+
+
+@doctor_app.command("tool-contracts")
+def doctor_tool_contracts(
+    json_output: bool = typer.Option(False, "--json", help="Output doctor result as JSON."),
+):
+    """Validate built-in tool contract, confirmation, and plugin-shape baselines."""
+    payload = validate_tool_registry_contracts(default_tool_registry())
+    typer.echo(json.dumps(payload, indent=2, sort_keys=True, default=str) if json_output else format_tool_contract_doctor(payload))
 
 
 @doctor_app.command("execution-tiers")
