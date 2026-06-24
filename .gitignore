@@ -1,32 +1,39 @@
 # Python
 __pycache__/
 *.py[cod]
-*.egg-info/
+*.pyo
+*.pyd
+.Python
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+htmlcov/
+
+# Packaging
+build/
+dist/
+*.egg-info/
 
 # Virtual environments
 .venv/
 venv/
 env/
 
-# Local runtime state
-memory/*.db
-memory/*.sqlite
-memory/*.sqlite3
-logs/
-*.log
-
-# Secrets
+# Environment
 .env
 .env.*
 !.env.example
 
-# Build artifacts
-dist/
-build/
-*.zip
+# Local runtime state
+memory/*
+!memory/.gitkeep
+knowledge/*
+!knowledge/.gitkeep
+
+# Logs
+*.log
+logs/
 
 # OS/editor
 .DS_Store

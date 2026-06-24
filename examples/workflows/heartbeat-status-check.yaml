@@ -1,0 +1,34 @@
+id: heartbeat-status-check
+name: Heartbeat Status Check
+description: Run a scheduled agent check-in on a heartbeat trigger.
+version: 0.9.0-beta.1
+
+trigger:
+  type: heartbeat
+  schedule:
+    every: 1 day
+
+runtime:
+  mode: sequential
+  max_steps: 2
+  timeout_seconds: 120
+  save_trace: true
+  fail_fast: true
+
+inputs:
+  check_name:
+    type: string
+    required: false
+    default: daily status check
+
+steps:
+  - id: status_check
+    type: agent
+    agent: Bob
+    prompt: >
+      Run the {{ inputs.check_name }}.
+      Summarize any meaningful issues, risks, or next actions.
+
+outputs:
+  final:
+    from: status_check.response

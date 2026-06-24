@@ -174,3 +174,33 @@ Focus:
 - Added `orch clean-testdata` to safely remove generated logs, exports, memory stores, pytest cache, Python bytecode caches, and other local runtime/test artifacts before publishing.
 - The command is dry-run by default and requires `--no-dry-run --confirm` before deleting anything.
 - Configuration and source files are preserved.
+
+
+## v0.9.0-beta.1 — Workflow Stabilization
+
+Status: in progress.
+
+Planned package structure:
+
+```text
+v0.9.0-beta.1-alpha.1 — Workflow Stabilization Core
+v0.9.0-beta.1-final — Workflow Examples, Docs, and Release Cleanup
+```
+
+Alpha.1 scope:
+
+```text
+workflow contract baseline
+workflow doctor checks
+workflow run/trace consistency
+```
+
+Boundaries:
+
+```text
+No single-agent workflow push.
+No new dashboard work.
+No local LLM work.
+No new tool/plugin features.
+No marketplace/plugin loader.
+```

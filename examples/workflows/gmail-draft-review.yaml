@@ -1,0 +1,51 @@
+id: gmail-draft-review
+name: Gmail Draft Review
+description: Search Gmail, read the most relevant message, and draft a reviewable reply.
+version: 0.9.0-beta.1
+
+trigger:
+  type: manual
+
+runtime:
+  mode: sequential
+  max_steps: 5
+  timeout_seconds: 240
+  save_trace: true
+  fail_fast: true
+
+inputs:
+  search_query:
+    type: string
+    required: true
+    description: Gmail search query, such as from:client@example.com newer_than:7d.
+  reply_goal:
+    type: string
+    required: true
+    description: What the reply should accomplish.
+
+steps:
+  - id: find_email
+    type: tool
+    tool: gmail.search
+    with:
+      query: "{{ inputs.search_query }}"
+      max_results: 1
+
+  - id: read_email
+    type: tool
+    tool: gmail.read
+    with:
+      message_id: "{{ steps.find_email.first_message_id }}"
+
+  - id: draft_reply
+    type: tool
+    tool: gmail.draft
+    with:
+      reply_message_id: "{{ steps.read_email.message_id }}"
+      body: >
+        Draft a concise, professional reply that accomplishes this goal:
+        {{ inputs.reply_goal }}
+
+outputs:
+  final:
+    from: draft_reply.draft_url

@@ -1,0 +1,37 @@
+id: webhook-content-request
+name: Webhook Content Request
+description: Accept a webhook request and route it to the content team.
+version: 0.9.0-beta.1
+
+trigger:
+  type: webhook
+  path: /webhooks/content-request
+  method: POST
+
+runtime:
+  mode: sequential
+  max_steps: 3
+  timeout_seconds: 240
+  save_trace: true
+  fail_fast: true
+
+inputs:
+  topic:
+    type: string
+    required: true
+  channel:
+    type: string
+    required: false
+    default: LinkedIn
+
+steps:
+  - id: create_content
+    type: team
+    team: ContentTeam
+    prompt: >
+      Create a useful {{ inputs.channel }} content draft for:
+      {{ inputs.topic }}
+
+outputs:
+  final:
+    from: create_content.response

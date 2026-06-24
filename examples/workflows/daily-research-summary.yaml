@@ -1,0 +1,41 @@
+id: daily-research-summary
+name: Daily Research Summary
+description: Search local knowledge and produce a concise research summary.
+version: 0.9.0-beta.1
+
+trigger:
+  type: manual
+
+runtime:
+  mode: sequential
+  max_steps: 4
+  timeout_seconds: 180
+  save_trace: true
+  fail_fast: true
+
+inputs:
+  topic:
+    type: string
+    required: true
+    description: Topic to research and summarize.
+
+steps:
+  - id: search_knowledge
+    type: tool
+    tool: knowledge.search
+    with:
+      query: "{{ inputs.topic }}"
+      top_k: 5
+
+  - id: summarize
+    type: agent
+    agent: Bob
+    prompt: >
+      Write a clear, useful summary for the user based on the knowledge search
+      results and the topic below.
+
+      Topic: {{ inputs.topic }}
+
+outputs:
+  final:
+    from: summarize.response

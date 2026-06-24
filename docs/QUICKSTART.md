@@ -1,159 +1,109 @@
-# Quickstart
+# Orchgentic Quickstart
 
-This guide walks through getting Orchgentic running locally, inspecting the included example agent, running a task, checking routes, and running a team workflow.
+This guide validates the v0.9.0-rc.1 developer experience from a clean install.
 
-## 1. Create and activate a virtual environment
+## Requirements
+
+- Python 3.12 or newer
+- Git
+- A configured provider in `.env`, such as Groq, OpenAI, or LM Studio
+
+## 1. Install
 
 From the project root:
 
 ```bash
-python -m venv .venv
+pip install -e .
 ```
 
-Activate it.
-
-Windows PowerShell:
-
-```powershell
-.venv\Scripts\Activate.ps1
-```
-
-Git Bash / macOS / Linux:
+## 2. Initialize a project
 
 ```bash
-source .venv/bin/activate
+orch init
 ```
 
-## 2. Install Orchgentic in editable mode
+Expected result:
+
+- project folders are created
+- example config is available
+- the `orch` CLI is available
+
+## 3. Create an agent
 
 ```bash
-python -m pip install -e ".[dev]"
+orch create-agent Bob
 ```
 
-The `dev` extra installs the test dependencies used by the project, including `pytest` and `pytest-asyncio`.
+Expected result:
 
-## 3. Configure environment variables
-
-Create a `.env` file in the project root.
-
-For Groq:
-
-```env
-GROQ_API_KEY=your_groq_api_key_here
-```
-
-For OpenAI, if using an OpenAI provider config:
-
-```env
-OPENAI_API_KEY=your_openai_api_key_here
-```
-
-Gmail tools require a Gmail OAuth connection. See [Tools and Policies](TOOLS_AND_POLICIES.md).
-
-## 4. Validate the install
-
-```bash
-python -m pytest -q
-```
-
-Expected result should look similar to:
-
-```text
-53 passed
-```
-
-The exact number may change as tests are added.
-
-## 5. List available agents
+- an agent YAML file is created
+- Bob appears in the agent list
 
 ```bash
 orch list-agents
 ```
 
-Example output:
-
-```text
-Bob (bob) - General Assistant
-Manager (manager) - Team Manager
-Researcher (researcher) - Research Specialist
-Writer (writer) - Writing Specialist
-Reviewer (reviewer) - Review Specialist
-```
-
-## 6. Inspect Bob
+## 4. Confirm tools
 
 ```bash
-orch inspect-agent Bob
+orch list-tools
 ```
 
-This shows Bob's provider, capabilities, tools, and delegation settings.
+Expected result:
 
-## 7. Run Bob
+- registered tools are listed
+- built-in tools appear without manual Python registration
+
+## 5. Run a basic agent task
 
 ```bash
-orch run Bob --debug
+orch run Bob "What time is it locally?" --debug
 ```
 
-When prompted:
+Expected result:
 
-```text
-Task: what is the local time?
-```
+- deterministic/local routing should handle local time when configured
+- debug output should show routing details
+- no unnecessary provider call should be needed for deterministic local time tasks
 
-Expected behavior:
+## 6. Validate memory, knowledge, and provider config
 
-- Orchgentic routes directly to `datetime.local`.
-- `external_llm_used` is `false`.
-- The answer uses Bob's configured timezone and locale.
-
-## 8. Preview routing without executing
+If the optional beta.2 doctor command is wired into the root CLI:
 
 ```bash
-orch judge-route "delete gmail message id abcdef123456" --agent Bob
+orch doctor agent agents/bob.yaml
+orch doctor agent agents/bob.yaml --json
 ```
 
-Expected behavior with the sample Bob policy:
+Expected result:
 
-```text
-policy.action: block
-reason: Tool 'gmail.delete' is disabled by policy.
-external_llm_allowed: false
-```
+- provider checks are clear
+- memory checks are clear
+- knowledge/RAG checks are clear
+- warnings do not block execution unless they are errors
 
-## 9. Run a direct tool call
+## 7. Validate workflows
 
 ```bash
-orch tool run datetime.local --agent Bob
+orch workflow list
+orch workflow doctor examples/workflows/daily-research-summary.yaml
 ```
 
-For a Gmail send with confirmation:
+Expected result:
+
+- workflows are discoverable
+- examples validate against the current workflow contract
+
+## 8. Run tests
 
 ```bash
-orch tool run gmail.send \
-  --agent Bob \
-  --arg to=studio@example.com \
-  --arg subject="Hello from Orchgentic" \
-  --arg body="This is a confirmed tool execution." \
-  --arg confirm=true
+python -m pytest -q
 ```
 
-## 10. Run ContentTeam
+Expected result:
 
-```bash
-orch run-team contentteam --debug
-```
+- all tests pass
 
-When prompted:
+## Clean install acceptance standard
 
-```text
-Research AI is changing how customers shop and create an Executive Summary
-```
-
-Expected behavior:
-
-- Manager assigns work.
-- Researcher provides findings.
-- Writer drafts the executive summary.
-- Reviewer gives improvement guidance.
-- Orchgentic synthesizes a final answer.
-- Debug output shows compressed team handoffs instead of nested run transcripts.
+A new developer should be able to follow this guide without hidden setup beyond provider credentials and any optional tool-specific auth such as Gmail.

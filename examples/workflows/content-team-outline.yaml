@@ -1,0 +1,37 @@
+id: content-team-outline
+name: Content Team Outline
+description: Use a configured team to create a structured content outline.
+version: 0.9.0-beta.1
+
+trigger:
+  type: manual
+
+runtime:
+  mode: sequential
+  max_steps: 3
+  timeout_seconds: 240
+  save_trace: true
+  fail_fast: true
+
+inputs:
+  topic:
+    type: string
+    required: true
+  audience:
+    type: string
+    required: false
+    default: general builders
+
+steps:
+  - id: content_strategy
+    type: team
+    team: ContentTeam
+    prompt: >
+      Create a practical content outline for the topic below.
+
+      Topic: {{ inputs.topic }}
+      Audience: {{ inputs.audience }}
+
+outputs:
+  final:
+    from: content_strategy.response

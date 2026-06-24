@@ -54,6 +54,9 @@ from orchgentic.observability.exporters import (
     export_runs_jsonl,
     write_export_text,
 )
+from orchgentic.workflows.registry import WorkflowRegistry
+from orchgentic.workflows.contracts import validate_workflow_contract, validate_workflow_directory
+from orchgentic.workflows.doctor import format_workflow_doctor, format_workflow_contract
 from orchgentic.observability.dashboard import (
     DEFAULT_DASHBOARD_PATH,
     OBSERVABILITY_SCHEMA_VERSION,
@@ -73,12 +76,14 @@ create_app = typer.Typer(help="Create Orchgentic configuration files.")
 knowledge_app = typer.Typer()
 create_app = typer.Typer(help="Create Orchgentic configuration files.")
 tool_app = typer.Typer()
+workflow_app = typer.Typer(help="Inspect and validate team-backed workflows.")
 create_app = typer.Typer(help="Create Orchgentic configuration files.")
 
 app.add_typer(memory_app, name="memory")
 app.add_typer(trigger_app, name="trigger")
 app.add_typer(knowledge_app, name="knowledge")
 app.add_typer(tool_app, name="tool")
+app.add_typer(workflow_app, name="workflow")
 app.add_typer(create_app, name="create")
 app.add_typer(connect_app, name="connect")
 app.add_typer(gmail_app, name="gmail")
@@ -1713,6 +1718,63 @@ def _parse_key_value_args(arg_items):
                     parsed[key] = value
     return parsed
 
+
+
+
+
+@workflow_app.command("list")
+def workflow_list(workflows_dir: str = typer.Option("workflows", "--workflows-dir")):
+    """List workflow blueprints."""
+    registry = WorkflowRegistry(workflows_dir)
+    workflows = registry.list_workflows()
+    if not workflows:
+        typer.echo("No workflow blueprints found.")
+        return
+    for workflow in workflows:
+        typer.echo(f"{workflow.id}\\t{workflow.name}\\tteam={workflow.team_name}\\tsteps={len(workflow.steps)}")
+
+
+@workflow_app.command("inspect")
+def workflow_inspect(
+    workflow_id: str,
+    workflows_dir: str = typer.Option("workflows", "--workflows-dir"),
+    json_output: bool = typer.Option(False, "--json", help="Output workflow contract as JSON."),
+):
+    """Inspect a workflow contract."""
+    registry = WorkflowRegistry(workflows_dir)
+    workflow = registry.get_workflow(workflow_id)
+    if workflow is None:
+        raise typer.BadParameter(f"Workflow not found: {workflow_id}")
+    payload = validate_workflow_contract(workflow)
+    typer.echo(json.dumps(payload, indent=2, sort_keys=True, default=str) if json_output else format_workflow_contract(payload))
+
+
+@workflow_app.command("validate")
+def workflow_validate(
+    workflow_id: str | None = typer.Argument(None),
+    workflows_dir: str = typer.Option("workflows", "--workflows-dir"),
+    json_output: bool = typer.Option(False, "--json", help="Output validation as JSON."),
+):
+    """Validate one workflow or all workflows."""
+    registry = WorkflowRegistry(workflows_dir)
+    if workflow_id:
+        workflow = registry.get_workflow(workflow_id)
+        if workflow is None:
+            raise typer.BadParameter(f"Workflow not found: {workflow_id}")
+        payload = validate_workflow_contract(workflow)
+    else:
+        payload = validate_workflow_directory(workflows_dir)
+    typer.echo(json.dumps(payload, indent=2, sort_keys=True, default=str) if json_output else format_workflow_doctor(payload))
+
+
+@doctor_app.command("workflows")
+def doctor_workflows(
+    workflows_dir: str = typer.Option("workflows", "--workflows-dir"),
+    json_output: bool = typer.Option(False, "--json", help="Output doctor result as JSON."),
+):
+    """Validate workflow contract and trace metadata expectations."""
+    payload = validate_workflow_directory(workflows_dir)
+    typer.echo(json.dumps(payload, indent=2, sort_keys=True, default=str) if json_output else format_workflow_doctor(payload))
 
 
 @tool_app.command("run")
