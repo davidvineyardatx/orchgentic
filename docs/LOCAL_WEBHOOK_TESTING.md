@@ -6,14 +6,16 @@ There are two ways to test it:
 
 This manually dispatches the trigger through Orchgentic:
 
+```bash
 orch trigger run order_webhook --debug
+```
 
 That uses the trigger YAML in:
 
 triggers/order_webhook.yaml
 
 Current example shape:
-
+```yaml
 trigger:
   id: order_webhook
   type: webhook
@@ -21,6 +23,7 @@ trigger:
   enabled: true
   path: /webhooks/orders
   task: |
+  ```
     Review this incoming webhook event and summarize what action is needed.
 
 This is useful for confirming the trigger can load, target Bob, and dispatch correctly.
@@ -29,8 +32,9 @@ This is useful for confirming the trigger can load, target Bob, and dispatch cor
 
 Start the webhook server:
 
+```bash
 orch serve-webhooks
-
+```
 By default it runs on:
 
 http://127.0.0.1:8000
@@ -45,18 +49,15 @@ Expected:
 
 Then send a test webhook payload to the path defined in the trigger YAML:
 
-curl -X POST http://127.0.0.1:8000/webhooks/orders ^
-  -H "Content-Type: application/json" ^
-  -d "{\"order_id\":\"12345\",\"customer\":\"Test Customer\",\"status\":\"new\"}"
-
 In Git Bash, use:
 
+```bash
 curl -X POST http://127.0.0.1:8000/webhooks/orders \
   -H "Content-Type: application/json" \
   -d '{"order_id":"12345","customer":"Test Customer","status":"new"}'
-
+```
 Expected response shape:
-
+```json
 {
   "ok": true,
   "results": [
@@ -66,6 +67,7 @@ Expected response shape:
     }
   ]
 }
+```
 
 If the path does not match any enabled webhook trigger, you should get a 404 like:
 
