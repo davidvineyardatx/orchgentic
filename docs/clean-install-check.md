@@ -1,4 +1,4 @@
-# v0.9.0-rc.1 Clean Install Check
+# v1.1.2 Clean Install Check
 
 Use this checklist from a fresh clone.
 
@@ -16,8 +16,10 @@ Expected:
 ## Install
 
 ```bash
-pip install -e .
+pip install -e ".[dev]"
 ```
+
+This installs the CLI/runtime and developer test dependencies. Use `pip install -e .` only when you do not plan to run the test suite.
 
 ## CLI
 
@@ -40,7 +42,7 @@ orch run Bob "What time is it locally?" --debug
 If `ContentTeam` example exists:
 
 ```bash
-orch run-team ContentTeam "Create a brief content outline for Orchgentic." --debug
+orch run-team ContentTeam "Create a brief content outline for growing tomatoes in central texas." --debug
 ```
 
 ## Workflows
@@ -59,6 +61,14 @@ orch doctor agent agents/bob.yaml
 ```
 
 ## Tests
+
+If pytest is missing, reinstall with the developer extra first:
+
+```bash
+python -m pip install -e ".[dev]"
+```
+
+Then run:
 
 ```bash
 python -m pytest -q

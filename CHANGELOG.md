@@ -2,6 +2,20 @@
 
 All notable changes to Orchgentic are documented here.
 
+## v1.1.2 — Quickstart CLI Compatibility
+
+- Added optional prompt arguments to `orch run` and `orch run-team` so quoted quickstart tasks execute without interactive prompting.
+- Restored the documented `orch create-agent` command for clone-first developer onboarding.
+- Added `orch workflow doctor` for direct workflow YAML file diagnostics and workflow id diagnostics.
+- Added flat workflow example validation for `examples/workflows/*.yaml` while preserving existing team-backed workflow contract validation.
+- Updated `docs/CLI_COMMANDS.md` to reflect the current CLI surface.
+- Added regression coverage for quickstart CLI compatibility and workflow doctor examples.
+
+### Developer dependency documentation
+
+- Clarified that test execution requires the `dev` extra: `python -m pip install -e ".[dev]"`.
+- Updated Quickstart and clean-install docs so new developers do not hit `No module named pytest` after a runtime-only install.
+
 ## v1.0.0 — Stable Developer Release
 
 - Promoted Orchgentic to a stable developer release.

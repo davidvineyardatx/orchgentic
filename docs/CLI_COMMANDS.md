@@ -1,77 +1,173 @@
 # Orchgentic CLI Commands
 
-This page lists the commonly used Orchgentic CLI commands.
+This page lists the currently supported Orchgentic CLI commands for the installed `orch` CLI.
 
-## Core Agent Commands
+## Help
+
+```bash
+orch --help
+orch <command> --help
+```
+
+## Workspace
 
 ```bash
 orch init
+orch init <path>
+```
+
+## Agent Commands
+
+```bash
 orch create-agent Bob
+orch create-agent Bob --provider groq --model llama-3.3-70b-versatile
+orch create-agent Bob --timezone America/Chicago --locale en-US
+orch create-agent Bob --overwrite
+
 orch list-agents
+orch inspect-agent Bob
+orch preflight-agent Bob --task "What time is it locally?"
+
 orch run Bob
 orch run Bob --debug
 orch run Bob --show-plan
+orch run Bob "What time is it locally?"
+orch run Bob "What time is it locally?" --debug
+orch run Bob "Write a short summary of Orchgentic." --debug
+orch run Bob "Draft a plan" --no-reflection
+orch run Bob "What time is it locally?" --no-preflight
 ```
 
-## Tool Commands
-
-Run a tool directly:
-
-```bash
-orch tool run datetime.local --agent Bob
-```
-
-Run a tool with arguments:
-
-```bash
-orch tool run gmail.send --agent Bob --arg to=studio@example.com --arg subject="Hello" --arg body="Testing" --arg confirm=true
-```
-
-Direct tool runs are observable and can record estimated token savings when they bypass LLM routing.
+`orch run Bob` remains interactive. Passing a quoted prompt runs that task directly, which is the recommended quickstart style for repeatable testing.
 
 ## Team Commands
 
 ```bash
+orch create-team ContentTeam
+orch create-team ContentTeam --orchestrator Manager --member Researcher --member Writer --member Reviewer
+orch create-team ContentTeam --members Researcher,Writer,Reviewer
+orch create-team ContentTeam --overwrite
+
+orch list-teams
+orch inspect-team ContentTeam
+orch preflight-team ContentTeam --task "Research AI shopping trends and create an executive summary"
+
 orch run-team ContentTeam
 orch run-team ContentTeam --debug
+orch run-team ContentTeam "Create a brief content outline for Orchgentic." --debug
 ```
 
-## Routing and Reasoning
+## Routing and Policy Commands
 
 Inspect routing without executing:
 
 ```bash
 orch judge-route "what is the local time?" --agent Bob
+orch judge-route "what is the local time?" --agent Bob --summary
+orch judge-route "what is the local time?" --agent Bob --summary --json
 orch judge-route "send an email to studio@example.com saying hello" --agent Bob
+orch judge-route "send a report email" --agent Bob --event-type webhook
 ```
 
-`judge-route` is analysis-only. Use `orch run` or `orch tool run` for execution.
+Policy and route metrics:
 
-## Provider Configuration
-
-Providers are configured in agent YAML files, not with a CLI command.
-
-Examples:
-
-```yaml
-provider:
-  type: openai
-  model: gpt-4.1-mini
+```bash
+orch policy-report "what is the local time?" --agent Bob
+orch policy-report "what is the local time?" --agent Bob --json
+orch route-metrics
 ```
 
-```yaml
-provider:
-  type: xai
-  model: grok-3-mini
+`judge-route` and `policy-report` are analysis-only. Use `orch run` or `orch tool run` for execution.
+
+## Tool Commands
+
+```bash
+orch list-tools
+orch list-tools --agent Bob
+orch list-capabilities
+
+orch tool run datetime.local --agent Bob
+orch tool run filesystem.read --agent Bob --arg path=README.md
+orch tool run filesystem.write --agent Bob --arg path=notes/test.txt --arg content="Hello" --arg confirm=true
+orch tool run gmail.send --agent Bob --arg to=studio@example.com --arg subject="Hello" --arg body="Testing" --arg confirm=true
+orch tool run datetime.local --agent Bob --args '{}'
 ```
 
-```yaml
-provider:
-  type: anthropic
-  model: claude-3-5-sonnet-latest
+Direct tool runs are observable and can record estimated token savings when they bypass LLM routing.
+
+## Workflow Commands
+
+```bash
+orch workflow list
+orch workflow list --workflows-dir workflows
+
+orch workflow inspect content_intelligence_summary
+orch workflow inspect content_intelligence_summary --json
+orch workflow inspect content_intelligence_summary --workflows-dir workflows
+
+orch workflow validate
+orch workflow validate --json
+orch workflow validate content_intelligence_summary
+orch workflow validate content_intelligence_summary --json
+orch workflow validate --workflows-dir workflows
+
+orch workflow doctor
+orch workflow doctor --json
+orch workflow doctor workflows/content_intelligence_summary.workflow.yaml
+orch workflow doctor examples/workflows/daily-research-summary.yaml
+orch workflow doctor examples/workflows/daily-research-summary.yaml --json
+orch workflow doctor content_intelligence_summary
+orch workflow doctor content_intelligence_summary --workflows-dir workflows
 ```
 
-See `docs/PROVIDERS.md` for supported provider types and environment variables.
+`workflow validate` validates the team-backed workflow blueprint registry. `workflow doctor` is the quickstart-facing diagnostic command and can validate both registered workflow ids and direct YAML file paths.
+
+## Trigger Commands
+
+```bash
+orch list-triggers
+orch trigger run order_webhook
+orch trigger run order_webhook --debug
+orch trigger heartbeat bob_heartbeat
+orch serve-webhooks
+orch serve-webhooks --host 127.0.0.1 --port 8000
+```
+
+## Memory Commands
+
+```bash
+orch memory recent --agent Bob
+orch memory recent --agent Bob --limit 10
+orch memory list --agent Bob
+orch memory list --agent Bob --limit 50
+orch memory episodes --agent Bob
+orch memory episodes --agent Bob --limit 25
+orch memory search "previous discussion" --agent Bob
+orch memory search "previous discussion" --agent Bob --limit 25
+orch memory clear --agent Bob --yes
+```
+
+## Knowledge Commands
+
+```bash
+orch knowledge ingest knowledge/example.txt --agent Bob
+orch knowledge search "What is Orchgentic?" --agent Bob
+orch knowledge search "What is Orchgentic?" --agent Bob --limit 5
+orch knowledge list --agent Bob
+orch knowledge clear --agent Bob --yes
+```
+
+## Gmail Connection Commands
+
+```bash
+orch connect gmail
+orch connect gmail --name assistant
+orch connect gmail --name assistant --credentials credentials.json
+
+orch gmail list
+orch gmail status --name assistant
+orch gmail disconnect --name assistant
+```
 
 ## Observability Commands
 
@@ -131,10 +227,15 @@ Run statistics and cleanup:
 ```bash
 orch runs-stats
 orch runs-stats --json
+orch runs-stats --status completed
+orch runs-stats --type agent
+orch runs-stats --agent Bob
+orch runs-stats --team ContentTeam
 
 orch runs-prune --older-than 30d --dry-run
 orch runs-prune --older-than 30d --no-dry-run --confirm
 orch runs-prune --status failed --dry-run
+orch runs-prune --limit 10 --dry-run
 
 orch run-delete <run_id> --confirm
 ```
@@ -168,6 +269,7 @@ orch dashboard --team ContentTeam
 orch dashboard --agent Bob
 orch dashboard --type tool
 orch dashboard --status completed
+orch dashboard --limit 500
 ```
 
 Open the existing dashboard file without regenerating it:
@@ -185,94 +287,33 @@ orch dashboard --open
 
 `--open` does not rebuild the dashboard. It opens the last generated HTML file.
 
-Generate a larger loaded set for browser-side pagination:
-
-```bash
-orch dashboard --limit 500
-orch dashboard --open
-```
-
-`--limit` controls how many recent runs are loaded into the static HTML file. The dashboard paginates that loaded set in the browser.
-
-## Dashboard Features
-
-The generated dashboard includes:
-
-```text
-run summary metrics
-failure summary metrics
-token usage
-estimated token savings
-active filters
-generated metadata
-search
-quick filters
-client-side pagination
-modal run details
-copy Run ID
-copy run-info command
-copy trace command
-copy export command
-empty states
-```
-
 ## Doctor Commands
 
-Diagnose observability readiness:
-
 ```bash
 orch doctor observability
 orch doctor observability --json
-```
-
-Check a custom dashboard path:
-
-```bash
 orch doctor observability --output exports/custom-dashboard.html
+
+orch doctor tool-contracts
+orch doctor tool-contracts --json
+
+orch doctor execution-tiers --agent Bob
+orch doctor execution-tiers --agent Bob --json
+
+orch doctor workflows
+orch doctor workflows --json
+orch doctor workflows --workflows-dir workflows
 ```
 
+## Clean Generated Test/Runtime Data
 
-## Beta.1 Stable Observability Commands
-
-The following command names are considered stable for v0.8.0-beta.1 developer testing:
-
-```text
-orch runs
-orch run-info
-orch trace
-orch export-run
-orch export-runs
-orch runs-stats
-orch runs-prune
-orch run-delete
-orch failures
-orch dashboard
-orch doctor observability
-```
-
-## Observability clean-install commands
-
-```bash
-orch doctor observability
-orch doctor observability --json
-orch dashboard
-orch dashboard --open
-orch tool run datetime.local --agent Bob
-```
-
-On a clean workspace, `orch doctor observability` explains whether the observability store exists, whether the dashboard file exists, whether the exports directory exists, and what to run next. `orch dashboard` can create a dashboard with zero runs. `orch dashboard --open` only opens an existing dashboard and does not regenerate it.
-
-## Clean generated test/runtime data
-
-Use this before committing or publishing a release when you want to remove local runtime artifacts but keep configuration files.
-
-Preview what would be removed. By default, the command shows grouped targets so the output stays readable:
+Preview what would be removed:
 
 ```bash
 orch clean-testdata
 ```
 
-Show every matched path when needed:
+Show every matched path:
 
 ```bash
 orch clean-testdata --verbose
@@ -282,29 +323,6 @@ Delete generated data after review:
 
 ```bash
 orch clean-testdata --no-dry-run --confirm
-```
-
-The command removes generated local artifacts such as:
-
-```text
-logs/
-exports/
-memory/
-.pytest_cache/
-__pycache__/
-*.pyc
-```
-
-It preserves configuration and source files such as:
-
-```text
-agents/
-teams/
-triggers/
-docs/
-.env
-provider credentials
-source code
 ```
 
 Optional filters:
@@ -318,24 +336,4 @@ orch clean-testdata --verbose
 orch clean-testdata --json
 ```
 
-## Final release cleanup and Python bytecode
-
-`orch clean-testdata` removes generated runtime/test artifacts, but running Python or `orch` may recreate `__pycache__/` and `*.pyc` files.
-
-For the final cleanup before publishing a GitHub release, run cleanup as the last command before `git status`.
-
-Git Bash:
-
-```bash
-PYTHONDONTWRITEBYTECODE=1 orch clean-testdata --no-dry-run --confirm
-git status
-```
-
-PowerShell:
-
-```powershell
-$env:PYTHONDONTWRITEBYTECODE="1"; orch clean-testdata --no-dry-run --confirm
-git status
-```
-
-After this final cleanup, avoid running `pytest`, `python`, or `orch` again before checking and committing, because those commands can recreate bytecode cache files.
+`orch clean-testdata` removes generated local artifacts such as `logs/`, `exports/`, `memory/`, `.pytest_cache/`, `__pycache__/`, and `*.pyc`. It preserves source code, configuration folders, docs, `.env`, and provider credentials.

@@ -1,6 +1,6 @@
 # Orchgentic Quickstart
 
-This guide validates the v0.9.0-rc.1 developer experience from a clean install.
+This guide validates the v1.1.2 developer experience from a clean install.
 
 ## Requirements
 
@@ -13,8 +13,10 @@ This guide validates the v0.9.0-rc.1 developer experience from a clean install.
 From the project root:
 
 ```bash
-pip install -e .
+pip install -e ".[dev]"
 ```
+
+This installs Orchgentic plus the developer test dependencies, including `pytest` and `pytest-asyncio`. For runtime-only usage, `pip install -e .` is still valid, but the test commands later in this guide require the `dev` extra.
 
 ## 2. Initialize a project
 
@@ -95,6 +97,14 @@ Expected result:
 - examples validate against the current workflow contract
 
 ## 8. Run tests
+
+The quickstart install above includes the `dev` extra. If you previously installed with only `pip install -e .`, run this first:
+
+```bash
+python -m pip install -e ".[dev]"
+```
+
+Then run:
 
 ```bash
 python -m pytest -q

@@ -57,6 +57,7 @@ from orchgentic.observability.exporters import (
 from orchgentic.workflows.registry import WorkflowRegistry
 from orchgentic.workflows.contracts import validate_workflow_contract, validate_workflow_directory
 from orchgentic.workflows.doctor import format_workflow_doctor, format_workflow_contract
+from orchgentic.workflows.runtime_doctor import validate_runtime_workflow_file, format_runtime_workflow_doctor
 from orchgentic.observability.dashboard import (
     DEFAULT_DASHBOARD_PATH,
     OBSERVABILITY_SCHEMA_VERSION,
@@ -1381,6 +1382,39 @@ def run_delete(
         typer.echo(f"Run not found: {run_id}")
         raise typer.Exit(1)
 
+
+@app.command("create-agent")
+def create_agent(
+    name: str,
+    provider_type: str = typer.Option("groq", "--provider", help="Provider type for the generated agent YAML."),
+    model: str = typer.Option("llama-3.3-70b-versatile", "--model", help="Model name for the generated agent YAML."),
+    role: str = typer.Option("General Assistant", "--role", help="Agent role."),
+    timezone_name: str = typer.Option("America/Chicago", "--timezone", help="IANA timezone for datetime.local."),
+    locale: str = typer.Option("en-US", "--locale", help="Locale hint for deterministic formatters."),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite an existing agent YAML file."),
+):
+    """Create a starter agent YAML file in the agents/ folder."""
+    try:
+        path = create_agent_file(
+            name,
+            provider_type=provider_type,
+            model=model,
+            role=role,
+            timezone=timezone_name,
+            locale=locale,
+            overwrite=overwrite,
+        )
+    except FileExistsError as exc:
+        typer.echo(str(exc))
+        typer.echo("Use --overwrite to replace it.")
+        raise typer.Exit(1)
+
+    typer.echo(f"Created agent: {path}")
+    typer.echo(f"Provider: {provider_type}/{model}")
+    typer.echo("")
+    typer.echo(f"Next: orch inspect-agent {name}")
+    typer.echo(f'Run:  orch run {name} "What time is it locally?" --debug')
+
 @app.command("list-agents")
 def list_agents():
     registry = AgentRegistry()
@@ -1524,6 +1558,7 @@ def preflight_team(team_name: str, task: str = typer.Option(..., "--task")):
 @app.command("run-team")
 def run_team(
     team_name: str,
+    prompt: str | None = typer.Argument(None, help="Team task/prompt. If omitted, Orchgentic prompts interactively."),
     debug: bool = typer.Option(False, "--debug"),
     no_preflight: bool = typer.Option(False, "--no-preflight")
 ):
@@ -1532,7 +1567,7 @@ def run_team(
         if not team:
             typer.echo(f"Team not found: {team_name}")
             raise typer.Exit(1)
-        task = typer.prompt("Team task", default=team.task)
+        task = prompt or typer.prompt("Team task", default=team.task)
         tracer = TraceCollector()
         tracer.start_run(run_type="team", task=task, team_id=getattr(team, "id", None), team_name=team.name, metadata={"source": "cli", "debug": debug})
         try:
@@ -1586,6 +1621,7 @@ def list_triggers():
 @app.command()
 def run(
     agent_name: str,
+    prompt: str | None = typer.Argument(None, help="Task/prompt to run. If omitted, Orchgentic prompts interactively."),
     debug: bool = typer.Option(False, "--debug"),
     show_plan: bool = typer.Option(False, "--show-plan"),
     no_reflection: bool = typer.Option(False, "--no-reflection"),
@@ -1594,8 +1630,9 @@ def run(
     async def _run():
         cfg = load_agent(_agent_path(agent_name))
 
+        task = prompt or typer.prompt("Task")
+
         if not no_preflight:
-            task = typer.prompt("Task")
             issues = CapabilityPreflight().check_agent_task(cfg, task)
             if issues:
                 for issue in issues:
@@ -1603,8 +1640,6 @@ def run(
                     typer.echo("")
                 if any(issue.severity.value in ["severe", "critical"] for issue in issues):
                     raise typer.Exit(1)
-        else:
-            task = typer.prompt("Task")
 
         provider = create_provider(cfg.provider)
         memory = MemoryManager(cfg.memory.db_path)
@@ -1765,6 +1800,29 @@ def workflow_validate(
     else:
         payload = validate_workflow_directory(workflows_dir)
     typer.echo(json.dumps(payload, indent=2, sort_keys=True, default=str) if json_output else format_workflow_doctor(payload))
+
+
+@workflow_app.command("doctor")
+def workflow_doctor(
+    target: str | None = typer.Argument(None, help="Workflow YAML path or workflow id. If omitted, validates the workflows directory."),
+    workflows_dir: str = typer.Option("workflows", "--workflows-dir"),
+    json_output: bool = typer.Option(False, "--json", help="Output doctor result as JSON."),
+):
+    """Diagnose a workflow YAML file or workflow directory without running it."""
+    if target:
+        target_path = Path(target)
+        if target_path.exists():
+            payload = validate_runtime_workflow_file(target_path)
+        else:
+            registry = WorkflowRegistry(workflows_dir)
+            workflow_path = registry.get_workflow_path(target)
+            if workflow_path is None:
+                raise typer.BadParameter(f"Workflow not found: {target}")
+            payload = validate_runtime_workflow_file(workflow_path)
+    else:
+        payload = validate_workflow_directory(workflows_dir)
+
+    typer.echo(json.dumps(payload, indent=2, sort_keys=True, default=str) if json_output else format_runtime_workflow_doctor(payload) if target else format_workflow_doctor(payload))
 
 
 @doctor_app.command("workflows")
